@@ -1,0 +1,15 @@
+# Gizli anahtarlar: asla repoya girmez
+key.txt
+*.key
+.env
+.env.*
+
+# Ham, büyük üretim çıktıları (web sürümleri assets/img içinde)
+assets/gen/
+
+# Firebase yerel önbelleği
+.firebase/
+firebase-debug.log
+
+# Yerel önizleme ayarları
+.claude/settings.local.json
