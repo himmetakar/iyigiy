@@ -2,7 +2,7 @@
 import {
   db, fs, onUser, isAdminUser, googleSignIn, logout, mountNav, getSettings, resetSettingsCache, DEFAULT_SETTINGS,
   WORLDS, CATEGORIES, TYPES, STYLES, OCCASIONS, STATUS, RET_STATUS, tl, pct, esc, fmtDate, toDate, toast, $, $$,
-  loadCatalog, loadKombinImage, kombinTotal, commissionLines, round2, uid8
+  loadCatalog, loadKombinImage, kombinTotal, commissionLines, round2, uid8, ROLES, slugify, validSlug
 } from './app.js';
 import { suggestKombins, COLORS, usageMap as engineUsage, currentRound } from './engine.js';
 
@@ -35,7 +35,7 @@ onUser(async u => {
 async function reloadCatalog() { CAT = await loadCatalog({ includeAll: true }); }
 
 const MENU = [['ozet', 'Özet'], ['urunler', 'Ürünler'], ['oneriler', 'Kombin önerileri'], ['kombinler', 'Kombinler'], ['siparisler', 'Siparişler'],
-  ['iadeler', 'İade ve değişim'], ['influencer', 'Influencerlar'], ['ayarlar', 'Komisyon ve ayarlar'], ['araclar', 'Araçlar']];
+  ['iadeler', 'İade ve değişim'], ['influencer', 'Influencerlar'], ['studyo', 'Stüdyo talepleri'], ['ayarlar', 'Komisyon ve ayarlar'], ['araclar', 'Araçlar']];
 
 function shell() {
   root.innerHTML = `<div class="side"><nav id="menu">${MENU.map(([k, l]) => `<button data-t="${k}">${l}<span class="n" data-n="${k}" style="display:none"></span></button>`).join('')}</nav><section id="view"></section></div>`;
@@ -51,13 +51,15 @@ async function badges() {
       getDocs(query(collection(db, 'returns'), where('status', '==', 'talep'))),
       getDocs(query(collection(db, 'influencers'), where('status', '==', 'basvuru')))]);
     set('siparisler', o.size); set('iadeler', r.size); set('influencer', i.size);
+    const t = await getDocs(query(collection(db, 'tryons'), where('status', 'in', ['bekliyor', 'onay'])));
+    set('studyo', t.size + CAT.kombins.filter(k => k.ownerUid && k.catalog === 'bekliyor' && k.status === 'magaza').length);
   } catch (e) { console.warn(e); }
 }
 function go(t) {
   TAB = t; history.replaceState(null, '', '#' + t);
   $$('#menu button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   const v = $('#view'); v.innerHTML = '<div class="spin"></div>';
-  ({ ozet, urunler, oneriler, kombinler, siparisler, iadeler, influencer, ayarlar, araclar })[t](v).catch(e => { console.error(e); v.innerHTML = `<div class="empty">Hata: ${esc(e.message)}</div>`; });
+  ({ ozet, urunler, oneriler, kombinler, siparisler, iadeler, influencer, studyo, ayarlar, araclar })[t](v).catch(e => { console.error(e); v.innerHTML = `<div class="empty">Hata: ${esc(e.message)}</div>`; });
 }
 
 /* =============== ÖZET =============== */
@@ -404,7 +406,7 @@ async function influencer(v) {
   const sum = (uid, st) => round2(sales.filter(s => s.infUid === uid && (!st || st.includes(s.status))).reduce((a, s) => a + s.commission, 0));
   v.innerHTML = `<div class="lab">Satış ortakları</div><h2 style="margin:8px 0 18px">Influencerlar</h2>
    <div class="card scroll"><table class="tbl"><thead><tr><th>Influencer</th><th>Kod</th><th>Vergi</th><th class="num">Tıklama</th><th class="num">Sipariş</th><th class="num">Bekleyen</th><th class="num">Ödenebilir</th><th class="num">Ödenen</th><th>Durum</th><th></th></tr></thead><tbody>
-   ${list.map(i => `<tr><td><b>${esc(i.name)}</b><div class="muted" style="font-size:12px">${esc(i.handles || '')} · ${esc(i.followers || '')} takipçi</div></td>
+   ${list.map(i => `<tr><td><b>${esc(i.name)}</b> <span class="badge">${esc(ROLES[i.role] || 'Influencer')}</span><div class="muted" style="font-size:12px">${esc(i.handles || '')} · ${esc(i.followers || '')} takipçi${i.slug && i.status === 'aktif' ? ` · <a class="link" href="/${esc(i.slug)}" target="_blank">/${esc(i.slug)}</a>` : ''}</div></td>
      <td>${i.code ? `<span class="badge gold">${esc(i.code)}</span>` : '-'}</td><td>${i.taxType === 'sirket' ? 'Şirket' : '20/B'}</td>
      <td class="num">${clicks.filter(c => c.infUid === i.id).length}</td><td class="num">${sales.filter(s => s.infUid === i.id && s.status !== 'iptal').length}</td>
      <td class="num">${tl(sum(i.id, ['beklemede']))}</td><td class="num"><b>${tl(sum(i.id, ['onayli']))}</b></td><td class="num">${tl(sum(i.id, ['odendi']))}</td>
@@ -421,7 +423,11 @@ function infManage(i, sales, pays) {
    <p class="muted" style="font-size:13px;margin-top:6px">Vergi: ${i.taxType === 'sirket' ? 'Şirket (fatura keser)' : '20/B istisna belgesi (stopaj %' + S.stopaj + ')'} · IBAN: ${esc(i.iban || '-')}</p>
    <div class="sep"></div>
    <div class="grid g2"><label class="f">Referans kodu (link: ?ref=kod)<input class="in" id="ic" value="${esc(i.code || slug(i.name))}"></label>
-    <label class="f">Durum<select class="in" id="is">${opt({ basvuru: 'Başvuru', aktif: 'Aktif', red: 'Reddedildi', durduruldu: 'Durduruldu' }, i.status)}</select></label></div>
+    <label class="f">Durum<select class="in" id="is">${opt({ basvuru: 'Başvuru', aktif: 'Aktif', red: 'Reddedildi', durduruldu: 'Durduruldu' }, i.status)}</select></label>
+    <label class="f">Rol<select class="in" id="ir">${opt(ROLES, i.role || 'influencer')}</select></label>
+    <label class="f">Kişisel mağaza adresi (${esc(location.host)}/…)<input class="in" id="isl" value="${esc(i.slug || slugify(i.name))}" placeholder="irem-derici"></label></div>
+   ${i.about ? `<p class="muted" style="font-size:13px;margin-top:12px;line-height:1.6">“${esc(i.about)}”</p>` : ''}
+   <p class="muted" style="font-size:12px;margin-top:10px;line-height:1.6">Aktif yapınca kişisel mağaza sayfası açılır, kombin stüdyosu kullanılabilir. Durdurulunca mağaza sayfası kapanır.</p>
    <div class="lab" style="margin-top:20px">Bu influencera özel komisyon (boş = genel oran)</div>
    <table class="tbl rates" style="margin-top:8px"><tr><th>Kategori</th><th>Genel</th><th>Özel</th></tr>
    ${Object.entries(CATEGORIES).map(([k, l]) => `<tr><td>${l}</td><td>${pct(S.commissions[k])}</td><td><input class="in" type="number" step="0.1" data-cr="${k}" value="${cr[k] ?? ''}" placeholder="-"></td></tr>`).join('')}</table>
@@ -438,10 +444,24 @@ function infManage(i, sales, pays) {
     if (!code) return toast('Kod gerekli', 'bad');
     const ex = await getDoc(doc(db, 'refCodes', code));
     if (ex.exists() && ex.data().uid !== i.id) return toast('Bu kod başka bir influencera ait', 'bad');
+    const role = $('#ir').value, sl = slugify($('#isl').value);
+    if (!validSlug(sl)) return toast('Mağaza adresi en az 3 karakter olmalı ve site sayfalarıyla çakışmamalı', 'bad');
+    const sx = await getDoc(doc(db, 'stores', sl));
+    if (sx.exists() && sx.data().uid !== i.id) return toast('Bu mağaza adresi başka birine ait', 'bad');
+    // Adres değiştiyse eski mağaza kaydının profil bilgileri yeni adrese taşınır.
+    let prev = sx.exists() ? sx.data() : null;
+    if (i.slug && i.slug !== sl) {
+      const old = await getDoc(doc(db, 'stores', i.slug));
+      if (old.exists()) { prev = prev || old.data(); await deleteDoc(doc(db, 'stores', i.slug)); }
+    }
     if (i.code && i.code !== code) await deleteDoc(doc(db, 'refCodes', i.code));
-    await updateDoc(doc(db, 'influencers', i.id), { code, status, customRates, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'influencers', i.id), { code, status, customRates, role, slug: sl, updatedAt: serverTimestamp() });
     if (status === 'aktif') await setDoc(doc(db, 'refCodes', code), { uid: i.id, customRates });
     else await deleteDoc(doc(db, 'refCodes', code)).catch(() => {});
+    const ig = (String(i.handles || '').match(/@([\w.]+)/) || [])[1] || '';
+    await setDoc(doc(db, 'stores', sl), { uid: i.id, slug: sl, code, role, active: status === 'aktif',
+      name: prev?.name || i.name, bio: prev?.bio ?? '', photo: prev?.photo || '', socials: prev?.socials || { instagram: ig },
+      updatedAt: serverTimestamp(), ...(prev ? {} : { createdAt: serverTimestamp() }) });
     closeModal(); go('influencer'); badges(); toast('Kaydedildi');
   };
   $('#ipay').onclick = async () => {
@@ -452,6 +472,113 @@ function infManage(i, sales, pays) {
   };
 }
 const slug = s => String(s || '').toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/[^a-z0-9]+/g, '').slice(0, 20);
+
+/* =============== STÜDYO TALEPLERİ =============== */
+// Influencer/stilist kombinlerinin ana katalog onayı ve "üzerimde gör" giydirme kuyruğu.
+// Giydirme, Gemini anahtarı yalnızca admin tarayıcısında olduğu için burada üretilir (Cloud Functions gelene kadar).
+async function studyo(v) {
+  await reloadCatalog();
+  const [ts, ss] = await Promise.all([getDocs(collection(db, 'tryons')), getDocs(collection(db, 'stores'))]);
+  const owners = {}; ss.forEach(d => owners[d.data().uid] = d.data());
+  const cat = CAT.kombins.filter(k => k.ownerUid && k.catalog === 'bekliyor' && k.status === 'magaza');
+  const tr = ts.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => ['bekliyor', 'onay'].includes(t.status))
+    .sort((a, b) => (toDate(a.createdAt) || 0) - (toDate(b.createdAt) || 0));
+  const key = localStorage.getItem('iy_gemini_key');
+  v.innerHTML = `<div class="lab">Influencer ve stilist kombinleri</div><h2 style="margin:8px 0 18px">Stüdyo talepleri</h2>
+   <div class="card gold"><p class="muted" style="font-size:13px;line-height:1.7">Stüdyoda hazırlanan kombinler sahibinin gardırobunda hemen yayına çıkar. <b style="color:var(--paper)">Ana katalog</b> (ana sayfa gardırobu ve tüm kombinler) için buradan onaylarsın.
+     Giydirme talepleri, kişinin boydan fotoğrafı ve kombin ürünleriyle Gemini'de üretilir; sen onaylayınca kombin onun gardırobunda bu görselle yayınlanır.</p>
+     ${key ? '' : '<p style="font-size:13px;margin-top:8px;color:var(--warn)">Giydirme üretmek için Ayarlar sekmesine Gemini API anahtarını gir (yalnızca bu tarayıcıda saklanır).</p>'}</div>
+   <h3 style="margin:28px 0 14px">Giydirme talepleri <span class="badge">${tr.length}</span></h3><div id="trl" style="display:grid;gap:14px"></div>
+   <h3 style="margin:32px 0 14px">Katalog onayı bekleyenler <span class="badge">${cat.length}</span></h3><div id="cal" style="display:grid;gap:14px"></div>`;
+  const TL = $('#trl'), CL = $('#cal');
+  if (!tr.length) TL.innerHTML = '<div class="empty">Bekleyen giydirme talebi yok.</div>';
+  for (const t of tr) TL.appendChild(tryonCard(t, owners[t.uid]));
+  if (!cat.length) CL.innerHTML = '<div class="empty">Onay bekleyen kombin yok.</div>';
+  for (const k of cat) CL.appendChild(ownerKombinCard(k, owners[k.ownerUid]));
+}
+const piecesHtml = k => {
+  const ps = (k.productIds || []).map(id => CAT.products[id]).filter(Boolean), ex = (k.extraIds || []).map(id => CAT.products[id]).filter(Boolean);
+  return `<div class="pieces">${ps.map(p => `<div class="pc"><img src="${esc(p.images?.[0] || '')}">${esc(p.name)}<br><span style="color:var(--gold2)">${tl(p.price)}</span></div>`).join('')}</div>
+    ${ex.length ? `<div class="lab" style="margin-top:12px">Eşlik eden · fiyata dahil değil</div><div class="pieces">${ex.map(p => `<div class="pc"><img src="${esc(p.images?.[0] || '')}">${esc(p.name)}<br><span class="muted">+${tl(p.price)}</span></div>`).join('')}</div>` : ''}`;
+};
+const ownerLine = (o, k) => o ? `<a class="link" href="/${esc(o.slug)}" target="_blank">${esc(o.name)}</a> · ${esc(ROLES[o.role] || 'Influencer')}` : esc(k?.ownerName || '-');
+function ownerKombinCard(k, o) {
+  const el = document.createElement('div'); el.className = 'card';
+  el.innerHTML = `<div class="kprop"><div class="im" data-im>Görsel yok</div><div>
+    <div class="between"><div class="row"><span class="badge warn">Katalog onayı</span><span class="badge gold">${WORLDS[k.world] || ''}</span><span class="badge">${k.gender === 'erkek' ? 'Erkek' : 'Kadın'}</span><span class="muted" style="font-size:12.5px">${ownerLine(o, k)}</span></div>
+     <b class="serif" style="font-size:22px;color:var(--gold2)">${tl(kombinTotal(k, CAT.products))}</b></div>
+    <h3 style="margin-top:10px">${esc(k.name)}</h3><p class="muted" style="font-size:13px;margin-top:4px">${esc(k.occ || '')}${k.desc ? ' · ' + esc(k.desc) : ''}</p>
+    ${piecesHtml(k)}<div class="row" style="margin-top:16px"><button class="btn sm" data-ok>Ana kataloğa al</button><button class="btn sm danger" data-no>Kataloğa alma</button><a class="btn sm ghost" href="/kombin?id=${k.id}" target="_blank">Gör</a></div></div></div>`;
+  if (k.image) loadKombinImage(k).then(s => { if (s) el.querySelector('[data-im]').innerHTML = `<img src="${s}">`; });
+  el.querySelector('[data-ok]').onclick = async () => { await updateDoc(doc(db, 'kombins', k.id), { status: 'yayinda', catalog: 'onayli', publishedAt: serverTimestamp() }); go('studyo'); badges(); toast('Kombin ana katalogda'); };
+  el.querySelector('[data-no]').onclick = async () => { await updateDoc(doc(db, 'kombins', k.id), { catalog: 'red' }); go('studyo'); badges(); toast('Kombin yalnızca sahibinin gardırobunda kalacak'); };
+  return el;
+}
+function tryonCard(t, o) {
+  const k = CAT.kombins.find(x => x.id === t.kombinId);
+  const el = document.createElement('div'); el.className = 'card';
+  if (!k) { el.innerHTML = `<div class="between"><span class="muted">Kombin silinmiş: ${esc(t.kombinName)}</span><button class="btn sm ghost" data-del>Talebi kaldır</button></div>`;
+    el.querySelector('[data-del]').onclick = async () => { await deleteDoc(doc(db, 'tryons', t.id)); go('studyo'); }; return el; }
+  el.innerHTML = `<div class="tryon"><div><div class="lab" style="margin-bottom:8px">Boydan fotoğraf</div><div class="im" data-bp>Yükleniyor…</div></div>
+    <div><div class="lab" style="margin-bottom:8px">Sonuç</div><div class="im" data-rs>${t.resultImage ? 'Yükleniyor…' : 'Henüz üretilmedi'}</div></div><div>
+    <div class="row"><span class="badge ${t.status === 'onay' ? 'gold' : 'warn'}">${t.status === 'onay' ? 'Onayını bekliyor' : 'Üretilecek'}</span><span class="muted" style="font-size:12.5px">${ownerLine(o, k)} · ${fmtDate(t.createdAt, 1)}</span></div>
+    <h3 style="margin-top:10px">${esc(k.name)}</h3>${piecesHtml(k)}
+    <div class="row" style="margin-top:16px" data-act></div></div></div>`;
+  let photo = null;
+  getDoc(doc(db, 'bodyPhotos', t.uid)).then(s => { const b = el.querySelector('[data-bp]');
+    if (s.exists()) { photo = s.data().data; b.innerHTML = `<img src="${photo}">`; } else b.textContent = 'Fotoğraf silinmiş'; });
+  if (t.resultImage) getDoc(doc(db, 'kombinImages', t.resultImage)).then(s => { if (s.exists()) el.querySelector('[data-rs]').innerHTML = `<img src="${s.data().data}">`; });
+  const act = el.querySelector('[data-act]');
+  const btn = (txt, cls, fn) => { const b = document.createElement('button'); b.className = 'btn sm ' + cls; b.textContent = txt; b.onclick = () => fn(b); act.appendChild(b); };
+  btn(t.resultImage ? 'Yeniden üret' : 'Gemini ile giydir', t.resultImage ? 'ghost' : '', async b => {
+    if (!photo) return toast('Boydan fotoğraf yok (silinmiş olabilir)', 'bad');
+    b.disabled = true; b.textContent = 'Üretiliyor… (30-60 sn)';
+    try {
+      const data = await generateTryon(photo, k);
+      const imgId = k.id + '-tryon-' + uid8();
+      await setDoc(doc(db, 'kombinImages', imgId), { data, kombinId: k.id, ownerUid: t.uid, kind: 'giydirme', model: localStorage.getItem('iy_gemini_model') || 'gemini-3-pro-image', createdAt: serverTimestamp() });
+      if (t.resultImage) deleteDoc(doc(db, 'kombinImages', t.resultImage)).catch(() => {});
+      await updateDoc(doc(db, 'tryons', t.id), { status: 'onay', resultImage: imgId, generatedAt: serverTimestamp() });
+      go('studyo'); toast('Görsel üretildi, kontrol edip onayla');
+    } catch (e) { console.error(e); toast('Üretilemedi: ' + e.message, 'bad'); b.disabled = false; b.textContent = 'Tekrar dene'; }
+  });
+  if (t.resultImage) btn('Onayla ve gardırobunda yayınla', '', async () => {
+    const old = k.image?.startsWith('img:') ? k.image.slice(4) : null;
+    await updateDoc(doc(db, 'kombins', k.id), { image: 'img:' + t.resultImage, tryon: 'hazir' });
+    await updateDoc(doc(db, 'tryons', t.id), { status: 'tamam', doneAt: serverTimestamp() });
+    if (old && old !== t.resultImage) deleteDoc(doc(db, 'kombinImages', old)).catch(() => {});
+    go('studyo'); badges(); toast('Kombin, kişinin fotoğrafıyla yayında');
+  });
+  btn('Reddet', 'danger', async () => {
+    const note = prompt('Kişiye iletilecek kısa not (ör. "Fotoğraf boydan değil"):', '') ?? null; if (note === null) return;
+    if (t.resultImage) deleteDoc(doc(db, 'kombinImages', t.resultImage)).catch(() => {});
+    await updateDoc(doc(db, 'tryons', t.id), { status: 'red', note, resultImage: null });
+    await updateDoc(doc(db, 'kombins', k.id), { tryon: 'yok' });
+    go('studyo'); badges(); toast('Talep reddedildi');
+  });
+  return el;
+}
+async function generateTryon(photo, k) {
+  const key = localStorage.getItem('iy_gemini_key'); if (!key) throw new Error('Ayarlar sekmesinden Gemini API anahtarını gir');
+  const ps = [...(k.productIds || []), ...(k.extraIds || [])].map(id => CAT.products[id]).filter(Boolean);
+  const me = await toBase64(photo);
+  const parts = [{ inlineData: { mimeType: me.mime, data: me.data } }], used = [];
+  for (const p of ps) { const src = p.images?.[0]; if (!src) continue;
+    try { const b = await toBase64(src); parts.push({ inlineData: { mimeType: b.mime, data: b.data } }); used.push(p); } catch (e) { console.warn('görsel alınamadı', src, e); } }
+  if (!used.length) throw new Error('Ürün görselleri okunamadı');
+  const list = used.map((p, i) => `image ${i + 2}: the ${p.name} (${(p.colors || []).join('/')})`).join('; ');
+  parts.push({ text: `Image 1 is a photo of a real person. Images 2 to ${used.length + 1} are product photos of clothing and accessories. Create one new photorealistic full-length fashion photograph of THE SAME PERSON from image 1: keep their face, facial features, hair, skin tone, body shape and proportions exactly as they are, so they are clearly recognisable as the same individual. They now wear, as one complete outfit, exactly these items reproduced faithfully in colour, cut, fabric and details: ${list}. If a bag is given they carry it naturally; if no shoes are given, add simple shoes that suit the outfit. Natural relaxed standing pose facing the camera, whole figure from head to toe, centred, with space above the head and below the feet. Elegant minimal studio set: deep warm charcoal backdrop, soft golden key light, subtle floor reflection, editorial luxury look, real skin and fabric texture. No text, no logos, no watermark.` });
+  const model = localStorage.getItem('iy_gemini_model') || 'gemini-3-pro-image';
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '9:16', imageSize: '1K' } } })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error?.message || ('HTTP ' + r.status));
+  const img = j.candidates?.[0]?.content?.parts?.find(x => x.inlineData);
+  if (!img) throw new Error('Model görsel döndürmedi');
+  return compressDataUrl(`data:${img.inlineData.mimeType};base64,${img.inlineData.data}`, 900, .84);
+}
 
 /* =============== AYARLAR =============== */
 async function ayarlar(v) {

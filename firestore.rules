@@ -11,6 +11,10 @@ service cloud.firestore {
         && request.auth.token.email in ['himmet.akarr@gmail.com', 'himmettakarr@gmail.com'];
     }
     function me() { return request.auth.uid; }
+    // Onaylı (aktif) influencer ya da stilist
+    function activePartner() {
+      return signedIn() && get(/databases/$(database)/documents/influencers/$(request.auth.uid)).data.status == 'aktif';
+    }
     function unchanged(keys) { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(keys); }
 
     // Genel ayarlar: komisyon oranları, iade ücreti vb.
@@ -24,13 +28,59 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    // Kombinler: herkes yayındakileri ve kişisel mağazalardakileri ('magaza') okur.
+    // Onaylı influencer/stilist kendi kombinini stüdyoda oluşturur; ana kataloğa ('yayinda') yalnızca admin alır.
     match /kombins/{id} {
-      allow read: if resource.data.status == 'yayinda' || isAdmin();
-      allow write: if isAdmin();
+      allow read: if resource.data.status in ['yayinda', 'magaza']
+                  || isAdmin()
+                  || (signedIn() && resource.data.ownerUid == me());
+      allow create: if isAdmin()
+                    || (activePartner() && request.resource.data.ownerUid == me()
+                        && request.resource.data.status == 'magaza'
+                        && request.resource.data.catalog in ['yok', 'bekliyor']
+                        && request.resource.data.tryon in ['yok', 'bekliyor']);
+      allow update: if isAdmin()
+                    || (activePartner() && resource.data.ownerUid == me() && request.resource.data.ownerUid == me()
+                        && (request.resource.data.status in ['magaza', 'arsiv']
+                            || (resource.data.status == 'yayinda' && request.resource.data.status == 'yayinda'
+                                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tryon', 'updatedAt'])))
+                        && request.resource.data.catalog in ['yok', 'bekliyor', resource.data.catalog]
+                        && request.resource.data.tryon in ['yok', 'bekliyor', resource.data.tryon]);
+      allow delete: if isAdmin() || (signedIn() && resource.data.ownerUid == me() && resource.data.status != 'yayinda');
     }
     match /kombinImages/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() || (activePartner() && request.resource.data.ownerUid == me());
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && resource.data.ownerUid == me());
+    }
+
+    // Kişisel mağaza sayfası (iyigiy.com/<slug>): herkes okur.
+    // Kimlik alanlarını (sahip, kod, rol, yayında olma) yalnızca admin belirler; sahibi profilini düzenler.
+    match /stores/{slug} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+                    || (signedIn() && resource.data.uid == me() && unchanged(['uid', 'slug', 'code', 'role', 'active']));
+    }
+
+    // Giydirme için boydan fotoğraf (KVKK: açık rıza ile, yalnızca sahibi ve admin görür, sahibi her an siler).
+    match /bodyPhotos/{uid} {
+      allow read: if (signedIn() && me() == uid) || isAdmin();
+      allow create, update: if signedIn() && me() == uid
+                            && request.resource.data.consent == true
+                            && request.resource.data.consentText is string;
+      allow delete: if (signedIn() && me() == uid) || isAdmin();
+    }
+
+    // Giydirme talepleri: influencer oluşturur, admin Gemini ile üretip sonuçlandırır.
+    match /tryons/{id} {
+      allow read: if (signedIn() && resource.data.uid == me()) || isAdmin();
+      allow create: if activePartner() && request.resource.data.uid == me() && request.resource.data.status == 'bekliyor';
+      allow delete: if (signedIn() && resource.data.uid == me()) || isAdmin();
+      allow update: if isAdmin()
+                    || (activePartner() && resource.data.uid == me() && request.resource.data.uid == me()
+                        && request.resource.data.status == 'bekliyor');
     }
 
     // Kullanıcı profili
@@ -61,7 +111,7 @@ service cloud.firestore {
       allow read: if (signedIn() && me() == uid) || isAdmin();
       allow create: if signedIn() && me() == uid && request.resource.data.status == 'basvuru';
       allow update: if isAdmin()
-                    || (signedIn() && me() == uid && unchanged(['status', 'code', 'customRates']));
+                    || (signedIn() && me() == uid && unchanged(['status', 'code', 'customRates', 'role', 'slug']));
       allow delete: if isAdmin();
     }
 

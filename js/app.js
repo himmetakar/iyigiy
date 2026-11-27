@@ -41,6 +41,26 @@ export const TYPES = {
   canta: { label: 'Çanta', cat: 'canta' },
   aksesuar: { label: 'Aksesuar (şapka, kemer, atkı)', cat: 'aksesuar' }
 };
+/* ---------------- satış ortağı rolleri ve kişisel mağaza ---------------- */
+export const ROLES = { influencer: 'Influencer', stilist: 'Modacı / stilist' };
+// Kişisel mağaza adresi: iyigiy.com/irem-derici. Site sayfalarıyla çakışan adlar kullanılamaz.
+export const RESERVED_SLUGS = ['index', 'admin', 'hesap', 'sepet', 'kombin', 'kombinler', 'influencer', 'magaza', 'studyo',
+  'css', 'js', 'assets', 'api', 'giris', 'iyigiy', 'yardim', 'iletisim', 'kvkk', 'gizlilik'];
+export const slugify = s => String(s || '').toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
+  .replace(/ö/g, 'o').replace(/ç/g, 'c').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+export const validSlug = s => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) && s.length >= 3 && !RESERVED_SLUGS.includes(s);
+// Görseli tarayıcıda küçültüp JPEG data URL'e çevirir (dosya ya da data URL alır).
+export function compressImage(src, max = 1000, q = .84) {
+  return new Promise((res, rej) => {
+    const go = url => { const im = new Image(); im.onload = () => {
+      const sc = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement('canvas');
+      c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', q)); }; im.onerror = rej; im.src = url; };
+    if (typeof src === 'string') go(src);
+    else { const r = new FileReader(); r.onload = () => go(r.result); r.onerror = rej; r.readAsDataURL(src); }
+  });
+}
+
 export const STYLES = ['Günlük', 'Ofis', 'Klasik', 'Sokak', 'Spor şık', 'Minimal', 'Davet'];
 export const OCCASIONS = ['Günlük', 'Ofis', 'Hafta sonu', 'Akşam ve davet', 'Seyahat', 'Spor'];
 export const STATUS = {
@@ -174,17 +194,18 @@ export async function captureRef() {
   const kombinId = p.get('k') || null;
   try {
     const r = await getDoc(doc(db, 'refCodes', code));
-    if (!r.exists()) return;
-    const infUid = r.data().uid;
-    localStorage.setItem('iy_ref', JSON.stringify({ code, infUid, kombinId, at: Date.now() }));
-    const key = 'iy_click_' + code + '_' + (kombinId || '') + '_' + new Date().toDateString();
-    if (!sessionStorage.getItem(key)) {
-      sessionStorage.setItem(key, '1');
-      await addDoc(collection(db, 'clicks'), { code, infUid, vid: visitorId(), kombinId, at: serverTimestamp() });
-    }
+    if (r.exists()) await recordRef(code, r.data().uid, kombinId);
   } catch (e) { console.warn('ref', e); }
   p.delete('ref'); p.delete('k');
   history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p : '') + location.hash);
+}
+// Referansı tarayıcıya yazar ve günde bir kez tıklama kaydeder (kişisel mağaza sayfası da bunu kullanır).
+export async function recordRef(code, infUid, kombinId = null) {
+  localStorage.setItem('iy_ref', JSON.stringify({ code, infUid, kombinId, at: Date.now() }));
+  const key = 'iy_click_' + code + '_' + (kombinId || '') + '_' + new Date().toDateString();
+  if (sessionStorage.getItem(key)) return;
+  sessionStorage.setItem(key, '1');
+  try { await addDoc(collection(db, 'clicks'), { code, infUid, vid: visitorId(), kombinId, at: serverTimestamp() }); } catch (e) { console.warn('click', e); }
 }
 export async function activeRef() {
   try {

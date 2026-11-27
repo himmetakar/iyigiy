@@ -30,7 +30,7 @@ const OCC = { 'Ofis': 'Ofis', 'Klasik': 'Ofis', 'Günlük': 'Günlük', 'Sokak':
 const ORDER = ['dis', 'ust', 'elbise', 'alt', 'ayakkabi', 'canta', 'aksesuar'];
 const rnd = a => a[Math.floor(Math.random() * a.length)];
 
-function colorScore(items) {
+export function colorScore(items) {
   const accents = [...new Set(items.flatMap(p => (p.colors || []).filter(c => !NEUTRAL.has(c) && c !== 'desenli')))];
   const patterns = items.filter(p => (p.colors || []).includes('desenli')).length;
   let s = 0;
@@ -51,7 +51,8 @@ function styleInfo(items) {
 // Yayında / öneride / onay bekleyen (arşiv hariç) kombinlerde her ürünün kaç kez kullanıldığı
 export function usageMap(kombins) {
   const u = {};
-  kombins.filter(k => !['arsiv', 'red'].includes(k.status)).forEach(k => [...(k.productIds || []), ...(k.extraIds || [])].forEach(id => u[id] = (u[id] || 0) + 1));
+  // Influencer/stilist stüdyosunda hazırlanan kombinler tur sayımını etkilemez.
+  kombins.filter(k => !['arsiv', 'red'].includes(k.status) && !k.ownerUid).forEach(k => [...(k.productIds || []), ...(k.extraIds || [])].forEach(id => u[id] = (u[id] || 0) + 1));
   return u;
 }
 // Ürünün bulunduğu tur: hiç kullanılmadıysa 1. tur, 1 kez kullanıldıysa 2. tur adayı vb.

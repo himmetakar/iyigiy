@@ -14,6 +14,8 @@ while ($listener.IsListening) {
     if ($rel -eq '') { $rel = 'index.html' }
     $path = [IO.Path]::GetFullPath((Join-Path $root $rel))
     if (-not (Test-Path $path -PathType Leaf) -and (Test-Path ($path + '.html') -PathType Leaf)) { $path = $path + '.html' }
+    # Hosting ile aynı: dosyası olmayan tek parçalı yol (/irem-derici) kişisel mağaza sayfasını açar.
+    if (-not (Test-Path $path -PathType Leaf) -and $rel -match '^[a-z0-9-]+$') { $path = Join-Path $root 'magaza.html' }
     if ($path.StartsWith($root) -and (Test-Path $path -PathType Leaf)) {
       $bytes = [IO.File]::ReadAllBytes($path)
       $ext = [IO.Path]::GetExtension($path).ToLower()

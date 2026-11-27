@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>iyigiy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/wardrobe.css">
+<style>
+/* Kişisel mağaza: gardırobun üstünde kişinin başlığı. Ray biraz aşağıda durur. */
+:root{--rail:29vh}
+@media (max-width:860px){:root{--rail:31vh}}
+/* Gardırop görseli ray ile birlikte aşağı kayar; başlık üstteki karanlık alanda kalır. */
+#room{background-position:center calc(var(--rail) - 11vh)}
+#room::before{content:"";position:absolute;left:0;right:0;top:0;height:calc(var(--rail) - 6vh);z-index:2;pointer-events:none;
+  background:linear-gradient(var(--bg) 70%,rgba(11,10,9,0))}
+#top .logo{text-decoration:none}
+@media (min-width:861px){#dp{top:calc(var(--rail) + 2vh);bottom:3vh;gap:18px;overflow-y:auto;scrollbar-width:none}}
+#head{position:fixed;left:0;right:0;top:calc(max(18px,env(safe-area-inset-top)) + 46px);z-index:16;text-align:center;padding:0 18px;
+  opacity:0;transform:translateY(-8px);transition:opacity 1s .5s,transform 1.2s .5s var(--ease);pointer-events:none}
+body.in[data-s=rail] #head{opacity:1;transform:none}
+body.in:not([data-s=rail]) #head{opacity:0;transition:opacity .4s}
+#head .who{display:inline-flex;align-items:center;gap:12px;pointer-events:auto;background:rgba(11,10,9,.55);backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:99px;padding:5px 16px 5px 5px;transition:border-color .3s}
+#head .who:hover{border-color:var(--gold)}
+#head .av{width:34px;height:34px;border-radius:50%;background:#1c1a17 center/cover;box-shadow:0 0 0 1px var(--gold3);display:grid;place-items:center;
+  font-family:var(--serif);color:var(--gold2);font-size:15px}
+#head .who span{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);font-weight:500}
+#head h1{font-family:var(--serif);font-weight:400;font-size:clamp(26px,3.3vw,46px);letter-spacing:-.01em;line-height:1.08;margin-top:14px;
+  text-shadow:0 4px 30px rgba(0,0,0,.8)}
+@media (max-width:860px){#allBtn{display:none}#head{top:calc(max(18px,env(safe-area-inset-top)) + 62px)}#head h1{font-size:24px;margin-top:10px}#head .av{width:28px;height:28px}}
+
+/* hakkında paneli */
+#about{position:fixed;inset:0;z-index:70;display:flex;justify-content:flex-end;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .4s}
+#about.on{opacity:1;pointer-events:auto}
+#about .sh{width:min(460px,100vw);height:100%;overflow-y:auto;background:var(--bg2);border-left:1px solid var(--line);transform:translateX(40px);transition:transform .6s var(--ease);
+  display:flex;flex-direction:column}
+#about.on .sh{transform:none}
+#about .ph{aspect-ratio:4/5;background:#1c1a17 center/cover;position:relative;flex:none}
+#about .ph::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 55%,var(--bg2))}
+#about .ph.none{aspect-ratio:auto;height:110px}
+#about .tx{padding:0 clamp(22px,4vw,36px) 40px;margin-top:-40px;position:relative}
+#about h2{font-family:var(--serif);font-weight:400;font-size:38px;line-height:1.05;margin-top:10px}
+#about p{color:var(--soft);font-size:15px;line-height:1.75;margin-top:18px;white-space:pre-line;user-select:text}
+#about .soc{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
+#about .soc a{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:99px;padding:10px 16px;font-size:13px;color:var(--paper);text-decoration:none;transition:.25s}
+#about .soc a:hover{border-color:var(--gold);color:var(--gold2)}
+#about .soc svg{width:15px;height:15px;fill:var(--gold2)}
+#about .note{margin-top:28px;padding-top:18px;border-top:1px solid var(--line2);font-size:12.5px;color:var(--mute);line-height:1.6}
+#about .x{position:absolute;right:14px;top:14px;width:40px;height:40px;border-radius:50%;background:rgba(11,10,9,.6);color:var(--paper);font-size:16px;z-index:2}
+
+/* bulunamadı */
+#nf{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;background:var(--bg)}
+#nf.on{display:flex}
+#nf h1{font-family:var(--serif);font-weight:400;font-size:clamp(32px,5vw,60px);margin:16px 0 14px}
+#nf p{color:var(--soft);line-height:1.7}
+#nf a.btn{display:inline-block;margin-top:30px;text-decoration:none}
+#loading{position:fixed;inset:0;z-index:79;display:grid;place-items:center;background:var(--bg);transition:opacity .8s}
+#loading i{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--gold);animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+body.in #loading{opacity:0;pointer-events:none}
+</style>
+</head>
+<body data-s="intro">
+
+<div id="room">
+  <div class="spot"></div>
+  <div id="stage"></div>
+  <div id="rail"></div>
+  <div id="fronts"></div>
+</div>
+
+<div id="top"><a class="logo" href="/">iyigiy</a>
+  <nav class="tl"><a href="/kombinler">Tüm kombinler</a><a href="/hesap">Hesabım</a><a href="/sepet">Sepet <b data-cart-count></b></a></nav>
+  <div class="me"></div></div>
+<div id="head"><button class="who" id="whoBtn"><i class="av" id="av"></i><span id="role"></span></button><h1 id="ttl"></h1></div>
+<a id="allBtn" href="#" style="cursor:pointer">Hakkında →</a>
+<div id="hint"><span id="hintT">Kılıfları sağa sola itin, birine dokunun</span></div>
+<button id="back">← Gardıroba dön</button>
+
+<aside id="dp"></aside>
+
+<div id="pm"><div class="sh">
+  <div class="gal"><div class="strip" id="strip"></div><button class="nav p" id="gp">‹</button><button class="nav n" id="gn">›</button><div class="dots" id="dots"></div></div>
+  <div class="inf" id="inf"></div>
+  <button class="x" id="px" aria-label="Kapat">✕</button>
+</div></div>
+
+<div id="about"><div class="sh"><button class="x" id="ax" aria-label="Kapat">✕</button><div class="ph" id="aph"></div><div class="tx" id="atx"></div></div></div>
+<div id="nf"><div><div class="lab">iyigiy</div><h1>Bu gardırop bulunamadı</h1><p>Adres yanlış olabilir ya da sayfa artık yayında değil.</p><a class="btn" href="/">Ana sayfaya dön</a></div></div>
+<div id="loading"><i></i></div>
+
+<script type="module" src="/js/magaza.js"></script>
+</body>
+</html>

@@ -7,172 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/wardrobe.css">
 <style>
-:root{
-  --bg:#0b0a09;--bg2:#13110f;--paper:#f2ece1;--soft:#9d9486;--mute:#6f685d;
-  --gold:#c9a45c;--gold2:#e8d09a;--gold3:#8a6a32;--line:rgba(201,164,92,.28);
-  --ease:cubic-bezier(.2,.75,.15,1);
-  --f:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --serif:"Playfair Display",Georgia,"Times New Roman",serif}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden;background:var(--bg)}
-body{font-family:var(--f);color:var(--paper);font-weight:400;-webkit-font-smoothing:antialiased;user-select:none}
-button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-em{font-style:italic;color:var(--gold2)}
-.lab{font-size:11px;letter-spacing:.24em;text-transform:uppercase;font-weight:500;color:var(--gold)}
-
-/* ============ gardırop ============ */
-#room{position:fixed;inset:0;overflow:hidden;background:var(--bg) url(assets/img/gardirop-dark.jpg) center top/cover no-repeat;
-  transform:scale(1.07);transition:transform 2.4s var(--ease)}
-body.in #room{transform:none}
-#room .spot{position:absolute;left:50%;top:-10vh;width:130vw;height:100vh;transform:translateX(-50%);pointer-events:none;z-index:1;
-  background:radial-gradient(42% 58% at 50% 0%,rgba(232,208,154,.16),rgba(232,208,154,0) 70%)}
-#room::after{content:"";position:absolute;inset:0;z-index:6;pointer-events:none;
-  background:radial-gradient(110% 85% at 50% 30%,transparent 38%,rgba(0,0,0,.72)),linear-gradient(transparent 72%,rgba(0,0,0,.55))}
-#fronts{position:absolute;inset:0;z-index:5;pointer-events:none}
-#fronts .fh{position:absolute;left:0;top:11vh;transform-origin:50% 0;will-change:transform;transition:opacity .6s}
-#rail{position:absolute;left:-2vw;right:-2vw;top:11vh;height:10px;margin-top:-5px;border-radius:5px;z-index:4;pointer-events:none;
-  background:linear-gradient(#f6e6b4 0,#c9a45c 30%,#6e5426 72%,#b8954f 100%);
-  box-shadow:0 22px 34px rgba(0,0,0,.6),0 0 22px rgba(232,208,154,.18)}
-#stage{position:absolute;inset:0;z-index:3;touch-action:none;cursor:grab}
-#stage.drag{cursor:grabbing}
-.it{position:absolute;left:0;top:11vh;transform-origin:50% 0;will-change:transform;transition:opacity .6s}
-.hook{position:absolute;left:50%;transform:translateX(-50%);overflow:visible;display:block;
-  filter:drop-shadow(0 6px 6px rgba(0,0,0,.5))}
-.bag{filter:drop-shadow(0 46px 40px rgba(0,0,0,.7))}
-.bag .body{position:relative;overflow:hidden;background:#0f0d0b;
-  clip-path:polygon(50% 0,60% .6%,97% 6.5%,100% 9.5%,100% 99.2%,98.6% 100%,1.4% 100%,0 99.2%,0 9.5%,3% 6.5%,40% .6%)}
-.bag .inside{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
-.bag .dark{position:absolute;inset:0;background:#050404;pointer-events:none}
-.bag .flap{position:absolute;inset:0;background-size:126% 120%;background-position:50% 55%;transition:transform 1.1s var(--ease);will-change:clip-path,transform}
-.bag .flap::after{content:"";position:absolute;inset:0;
-  background:linear-gradient(90deg,rgba(0,0,0,.45),transparent 16%,transparent 84%,rgba(0,0,0,.5)),linear-gradient(rgba(255,240,210,.06),transparent 30%)}
-.bag .rim{position:absolute;inset:0;pointer-events:none;z-index:2;clip-path:inherit;
-  box-shadow:inset 0 0 0 1px rgba(201,164,92,.35)}
-.bag .wl{position:absolute;left:10%;bottom:6.5%;background:var(--bg);color:var(--gold2);font-size:9px;letter-spacing:.28em;font-weight:500;
-  padding:7px 10px 6px;text-transform:uppercase;border:1px solid var(--gold3);z-index:2}
-.bag svg.teeth{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-.bag .pull{position:absolute;left:50%;width:64px;height:84px;margin:-18px 0 0 -32px;touch-action:none;cursor:grab;display:none;z-index:3}
-.bag .pull i{position:absolute;left:50%;top:6px;width:18px;height:22px;margin-left:-9px;border-radius:5px 5px 7px 7px;
-  background:linear-gradient(90deg,#6e5426,#f6e6b4 45%,#9c7a3a);box-shadow:0 2px 6px rgba(0,0,0,.7)}
-.bag .pull b{position:absolute;left:50%;top:24px;width:13px;height:42px;margin-left:-6.5px;border-radius:4px 4px 8px 8px;
-  background:linear-gradient(90deg,#6e5426,#f6e6b4 50%,#8a6a32);box-shadow:0 5px 9px rgba(0,0,0,.7)}
-.bag .pull b::after{content:"";position:absolute;left:4px;right:4px;bottom:6px;height:11px;border-radius:3px;background:rgba(0,0,0,.45)}
-.bag .pull img{position:absolute;left:50%;top:14px;width:26px;transform:translateX(-50%);pointer-events:none;
-  filter:drop-shadow(0 5px 5px rgba(0,0,0,.75)) drop-shadow(0 1px 1px rgba(0,0,0,.6))}
-.pull.real i,.pull.real b{display:none}
-.bag.sel .pull{display:block}
-.bag.peeled .flap.l{transform:translateX(-103%)}
-.bag.peeled .flap.r{transform:translateX(103%)}
-.bag svg.teeth,.bag .pull{transition:opacity .4s}
-.bag.peeled svg.teeth,.bag.peeled .pull{opacity:0;pointer-events:none}
-.cap{position:absolute;left:0;right:0;top:100%;padding-top:18px;text-align:center;transition:opacity .4s;pointer-events:none}
-.cap b{display:block;font-family:var(--serif);font-weight:400;font-size:19px;margin-top:6px;color:var(--paper)}
-.bag.sel .cap{opacity:0}
-body[data-s=focus] .it:not(.sel),body[data-s=open] .it:not(.sel){opacity:0;pointer-events:none}
-
-/* üst bar */
-#top{position:fixed;left:0;right:0;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;
-  padding:max(18px,env(safe-area-inset-top)) clamp(16px,3vw,34px) 0;pointer-events:none;opacity:0;transition:opacity 1s .6s}
-body.in #top{opacity:1}
-.logo{font-family:var(--serif);font-style:italic;font-size:26px;color:var(--paper);letter-spacing:-.01em}
-#top .me{font-size:12px;color:var(--soft);text-align:right;line-height:1.6;letter-spacing:.04em;pointer-events:auto}
-#top .me a{color:var(--gold2)}
-#top .tl{display:flex;gap:26px;pointer-events:auto;font-size:13px;letter-spacing:.06em}
-#top .tl a{color:var(--paper);text-decoration:none;opacity:.8}
-#top .tl a:hover{opacity:1;color:var(--gold2)}
-#top .tl b{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--gold);color:#14110c;font-size:11px}
-@media (max-width:860px){#top{flex-wrap:wrap;row-gap:6px}#top .tl{order:3;width:100%;justify-content:center;gap:18px;font-size:12px}#top .me{font-size:10.5px}}
-#allBtn{position:fixed;right:clamp(12px,3vw,34px);bottom:max(18px,env(safe-area-inset-bottom));z-index:15;background:rgba(11,10,9,.72);backdrop-filter:blur(10px);
-  border:1px solid var(--line);border-radius:99px;padding:13px 20px;font-size:13px;font-weight:500;color:var(--gold2);text-decoration:none;opacity:0;transition:opacity .8s 1s}
-body.in[data-s=rail] #allBtn{opacity:1}
-body:not([data-s=rail]) #allBtn{pointer-events:none}
-#back{position:fixed;left:clamp(12px,3vw,34px);bottom:max(18px,env(safe-area-inset-bottom));z-index:30;background:rgba(11,10,9,.72);backdrop-filter:blur(10px);
-  border:1px solid var(--line);border-radius:99px;padding:13px 20px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transform:translateY(10px);transition:.5s var(--ease)}
-body[data-s=focus] #back,body[data-s=open] #back{opacity:1;pointer-events:auto;transform:none}
-#hint{position:fixed;left:0;right:0;bottom:max(26px,env(safe-area-inset-bottom));z-index:15;text-align:center;pointer-events:none;
-  font-size:13px;letter-spacing:.04em;opacity:0;transition:opacity .6s}
-body.in[data-s=rail] #hint,body[data-s=focus] #hint{opacity:1}
-#hint span{display:inline-block;background:rgba(11,10,9,.6);backdrop-filter:blur(10px);border:1px solid var(--line);padding:11px 20px;border-radius:99px;color:var(--gold2)}
-
-/* ============ detay ============ */
-#dp{position:fixed;z-index:25;left:52%;right:4vw;top:15vh;bottom:5vh;display:flex;flex-direction:column;justify-content:center;gap:24px;
-  opacity:0;pointer-events:none;transition:opacity .5s}
-body[data-s=open] #dp{opacity:1;pointer-events:auto;transition:opacity .8s .7s}
-#dp h2{font-family:var(--serif);font-weight:400;font-size:clamp(32px,3.8vw,58px);letter-spacing:-.01em;line-height:1.02;margin-top:12px}
-#dp .d{color:var(--soft);font-size:15px;line-height:1.7;max-width:440px;margin-top:14px}
-.pcs{display:flex;gap:clamp(10px,1.4vw,20px);flex-wrap:wrap}
-.pc{width:clamp(96px,10.5vw,150px);text-align:left;opacity:0;transform:translate(var(--fx),var(--fy)) scale(.2)}
-body[data-s=open] .pc{animation:fly 1.1s var(--ease) forwards;animation-delay:calc(.9s + var(--i)*.12s)}
-@keyframes fly{to{opacity:1;transform:rotate(var(--r))}}
-.pc .ph{display:block;aspect-ratio:3/4;border-radius:6px;overflow:hidden;background:#222;box-shadow:0 22px 30px rgba(0,0,0,.6),0 0 0 1px var(--line);
-  animation:bob 5s ease-in-out infinite;animation-delay:calc(var(--i)*-1.3s);transition:box-shadow .3s}
-.pc:hover .ph{box-shadow:0 28px 38px rgba(0,0,0,.7),0 0 0 1px var(--gold)}
-@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
-.pc img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
-.pc span{display:block;font-size:12.5px;line-height:1.3;margin-top:12px;font-weight:500}
-.pc em{font-style:normal;font-size:12px;color:var(--soft)}
-.pc em u{color:var(--gold2);text-underline-offset:3px}
-.seal{display:flex;gap:12px;align-items:center;font-size:13px;color:var(--soft);line-height:1.5}
-.seal i{flex:0 0 26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f6e6b4,#c9a45c 45%,#6e5426);box-shadow:0 2px 6px rgba(0,0,0,.5)}
-.pair{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:rgba(201,164,92,.04)}
-.pair p{font-family:var(--serif);font-size:17px;line-height:1.35}
-.pair small{display:block;font-size:11.5px;color:var(--soft);margin-top:8px}
-.pair .xs{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-.pair .xi{display:flex;align-items:center;gap:10px;padding:8px 12px 8px 8px;border:1px solid var(--line2);border-radius:10px;cursor:pointer;position:relative;transition:.25s}
-.pair .xi img{width:40px;height:52px;object-fit:cover;border-radius:6px}
-.pair .xi span{display:flex;flex-direction:column;font-size:12.5px;line-height:1.3}
-.pair .xi em{font-style:normal;color:var(--soft);font-size:12px}
-.pair .xi input{position:absolute;opacity:0}
-.pair .xi i{width:18px;height:18px;border-radius:5px;border:1px solid var(--gold3);margin-left:6px;display:grid;place-items:center}
-.pair .xi:has(input:checked){border-color:var(--gold);background:rgba(201,164,92,.08)}
-.pair .xi:has(input:checked) i{background:var(--gold)}
-.pair .xi:has(input:checked) i::after{content:"✓";color:#14110c;font-size:12px;font-style:normal}
-.buy{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
-.buy b{font-family:var(--serif);font-weight:400;font-size:30px;color:var(--gold2)}
-.btn{background:linear-gradient(135deg,#ecd8a6,#c9a45c 55%,#a8853f);color:#14110c;border-radius:99px;padding:16px 30px;font-size:13px;font-weight:600;
-  letter-spacing:.14em;text-transform:uppercase;box-shadow:0 10px 30px rgba(201,164,92,.18);transition:transform .3s var(--ease),filter .3s}
-.btn:hover{filter:brightness(1.07)}
-.btn:active{transform:scale(.96)}
-.btn.ok{background:var(--bg2);color:var(--gold2);box-shadow:inset 0 0 0 1px var(--gold)}
-@media (max-width:860px){
-  #dp{left:0;right:0;top:55vh;bottom:0;justify-content:flex-start;gap:14px;padding:18px 18px 28px;background:linear-gradient(rgba(11,10,9,0),var(--bg) 26px);overflow-y:auto}
-  #dp>*{flex:none}
-  #dp h2{font-size:30px;margin-top:6px}#dp .d{display:none}
-  .pcs{flex-wrap:nowrap;overflow-x:auto;margin:0 -18px;padding:10px 18px 18px;scrollbar-width:none}
-  .pc{flex:0 0 27vw}
-  #back{bottom:auto;top:max(58px,calc(env(safe-area-inset-top) + 46px));padding:10px 16px}
-}
-
-/* ============ parça penceresi ============ */
-#pm{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.66);backdrop-filter:blur(12px);
-  opacity:0;pointer-events:none;transition:opacity .4s}
-#pm.on{opacity:1;pointer-events:auto}
-#pm .sh{background:var(--bg2);border:1px solid var(--line);border-radius:18px;width:min(880px,94vw);max-height:92vh;display:grid;grid-template-columns:1.05fr 1fr;overflow:hidden;
-  box-shadow:0 40px 80px rgba(0,0,0,.6);transform:translateY(30px) scale(.97);transition:transform .6s var(--ease)}
-#pm.on .sh{transform:none}
-.gal{position:relative;background:#1c1a17}
-.gal .strip{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;height:100%}
-.gal .strip::-webkit-scrollbar,.pcs::-webkit-scrollbar{display:none}
-.gal img{flex:0 0 100%;width:100%;height:100%;max-height:92vh;object-fit:cover;scroll-snap-align:center;display:block}
-.gal .dots{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;gap:7px}
-.gal .dots i{width:7px;height:7px;border-radius:50%;background:rgba(11,10,9,.35);transition:.3s}
-.gal .dots i.on{background:var(--bg);width:20px;border-radius:9px}
-.gal .nav{position:absolute;top:50%;width:42px;height:42px;margin-top:-21px;border-radius:50%;background:rgba(11,10,9,.7);color:var(--gold2);font-size:18px}
-.gal .nav.p{left:12px}.gal .nav.n{right:12px}
-.inf{padding:clamp(24px,3vw,44px);display:flex;flex-direction:column;gap:20px;justify-content:center;position:relative}
-.inf h3{font-family:var(--serif);font-weight:400;font-size:clamp(26px,2.8vw,38px);line-height:1.05}
-.inf .pr{font-family:var(--serif);font-size:22px;color:var(--gold2)}
-.sz{display:flex;gap:8px;flex-wrap:wrap}
-.sz button{min-width:50px;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:14px;transition:.25s}
-.sz button:hover{border-color:var(--gold)}
-.sz button.on{background:var(--gold);color:#14110c;border-color:var(--gold)}
-.inf small{font-size:12.5px;color:var(--soft);line-height:1.6}
-.inf small b{color:var(--gold2);font-weight:500}
-#pm .x{position:absolute;right:14px;top:14px;width:40px;height:40px;border-radius:50%;background:rgba(242,236,225,.08);color:var(--paper);font-size:16px;z-index:2}
-@media (max-width:760px){#pm{align-items:flex-end}#pm .sh{grid-template-columns:1fr;width:100vw;border-radius:18px 18px 0 0;max-height:94vh;overflow-y:auto}
-  .gal img{height:52vh}.gal .nav{display:none}}
-
 /* ============ kapılar + karşılama ============ */
 .door{position:fixed;top:0;bottom:0;width:50.2vw;z-index:40;transition:transform 2.2s cubic-bezier(.7,0,.15,1);overflow:hidden;
   background:radial-gradient(120% 80% at 50% 30%,#1a1714,#0b0a09 70%)}
@@ -289,22 +125,16 @@ body.knob #prog{opacity:0}
 </div>
 
 <script type="module">
-import { db, fs, auth, onUser, getSettings, loadCatalog, loadKombinImage, localProfile, saveLocalProfile, addToCart, updateCartBadge, pairingText, WORLDS, WORLD_FABRIC, sizeIndex } from '/js/app.js';
+import { db, fs, auth, loadCatalog, localProfile, saveLocalProfile, updateCartBadge, getSettings, sizeIndex } from '/js/app.js';
 import { dailyPicks } from '/js/reco.js';
+import { toWardrobeItems, hangWardrobe } from '/js/wardrobe.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v)), lerp=(a,b,t)=>a+(b-a)*t;
-const tl=n=>'₺'+n.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const body=document.body, S=v=>{body.dataset.s=v};
-const GOLD='#c9a45c';
 
 /* ---------- veri: yayındaki kombinler veritabanından ---------- */
 let K=[];
-const toPc=p=>({k:p.id,n:p.name,f:+p.price||0,s:p.sizes?.length?p.sizes:['Tek beden'],imgs:p.images||[]});
 const catalogP=Promise.all([loadCatalog(),getSettings()]).then(([{products,kombins},st])=>{
-  K=kombins.map(k=>({id:k.id,g:k.gender,world:WORLDS[k.world]||'',fab:WORLD_FABRIC[k.world]||'pamuk',name:k.name,occ:k.occ||'',d:k.desc||'',
-    styles:k.styles||[],productIds:k.productIds,_raw:k,
-    p:k.productIds.map(id=>products[id]).filter(Boolean).map(toPc),
-    x:(k.extraIds||[]).map(id=>products[id]).filter(Boolean).map(toPc)}));
+  K=toWardrobeItems(kombins,products);
   return {products,settings:st};
 }).catch(e=>{console.error(e);return {products:{},settings:{dailyCount:9}};});
 const saved=localProfile();
@@ -334,191 +164,14 @@ async function finish(){
   saveLocalProfile({kim:prof.kim,yas:prof.yas,h:prof.h,k:prof.k,tarz:prof.tarz,renk:prof.renk,butce:prof.butce,done:1});
   if(auth.currentUser){ fs.setDoc(fs.doc(db,'users',auth.currentUser.uid),{gender:prof.kim||'',age:prof.yas||'',h:prof.h,k:prof.k,styles:prof.tarz||[],colors:prof.renk||'',budget:prof.butce||''},{merge:true}).catch(()=>{}); }
   const {products,settings}=await catalogP;
-  PICKS=dailyPicks(K.map(x=>x._raw),products,prof,settings.dailyCount||9,auth.currentUser?.uid||'').map(r=>K.find(x=>x.id===r.id));
+  const PICKS=dailyPicks(K.map(x=>x._raw),products,prof,settings.dailyCount||9,auth.currentUser?.uid||'').map(r=>K.find(x=>x.id===r.id));
   if(!PICKS.length){ $('#hintT').innerHTML='Gardırobunuz şimdilik boş. Yakında yeni kombinler asılacak.'; }
-  build();
+  hangWardrobe(PICKS,{sizeIdx});
   setTimeout(()=>body.classList.add('knob'),1500);
   setTimeout(()=>{body.classList.add('in');S('rail');},2300);
   setTimeout(()=>{$('#intro').remove();$('#prog').remove();},5200);
 }
 
-/* ---------- askılık ---------- */
-const stage=$('#stage'); let items=[],vw,vh,bH,bW,gap,ox=0,oxT=0,vel=0,sel=null,mobile,total=0;
-/* Tek askı çizimi: kanca halkasının merkezi (50,10) raya oturur. Kılıflarda yalnızca kanca görünür. */
-/* Kancanın ucu (sol yarı) rayın arkasında kalır; ön yarısının kopyası rayın önüne çizilir. */
-let hid=0;
-function hookSVG(s,full,front){
-  const sw=(4.2/s).toFixed(2), id='hc'+(hid++);
-  const hook=`<path d="M42.5 12.5a7.5 7.5 0 1 1 15 -2.5c0 5 -7.5 6 -7.5 11.5V${full?29:40}" fill="none" stroke="url(#${id}g)" stroke-width="${sw}" stroke-linecap="round"/>`;
-  return `<svg class="hook" width="${(100*s).toFixed(1)}" height="${(60*s).toFixed(1)}" viewBox="0 0 100 60" style="top:${(-10*s).toFixed(1)}px">
-   <defs><linearGradient id="${id}g" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox"><stop offset="0" stop-color="#8a6a32"/><stop offset=".45" stop-color="#f2dca0"/><stop offset="1" stop-color="#a8853f"/></linearGradient>
-   <clipPath id="${id}c"><rect x="50" y="-5" width="60" height="70"/></clipPath></defs>
-   ${front?`<g clip-path="url(#${id}c)">${hook}</g>`:hook}
-   ${full&&!front?`<path d="M50 29L94 51.5Q99 57 92.5 57.5H7.5Q1 57 6 51.5Z" fill="none" stroke="${GOLD}" stroke-width="${sw}" stroke-linejoin="round"/>`:''}</svg>`;
-}
-let PICKS=[];
-function build(){
-  const seq=['e',...PICKS,'e','e'];
-  stage.innerHTML=''; $('#fronts').innerHTML=''; items=seq.map(k=>{
-    const el=document.createElement('div'); const it={el,k:k==='e'?null:k,a:0,va:0,cx:0,cs:1,p:0,pT:0,_p:-1};
-    if(!it.k){el.className='it empty';}
-    else{ el.className='it bag'; const tot=k.p.reduce((s,x)=>s+x.f,0);
-      el.innerHTML=`<div class="body">
-        <img class="inside" alt="" draggable="false"><div class="dark"></div>
-        <div class="flap l" style="background-image:url(/assets/img/bag2-${k.fab}.jpg)"><span class="wl">${k.world}</span></div>
-        <div class="flap r" style="background-image:url(/assets/img/bag2-${k.fab}.jpg)"></div>
-        <svg class="teeth">
-          <path class="tpL" fill="none" stroke="#0a0907" stroke-width="7" stroke-linejoin="round" opacity=".85"/>
-          <path class="tpR" fill="none" stroke="#0a0907" stroke-width="7" stroke-linejoin="round" opacity=".85"/>
-          <path class="tL" fill="none" stroke="${GOLD}" stroke-width="6" stroke-dasharray="2.4 2.6"/>
-          <path class="tR" fill="none" stroke="${GOLD}" stroke-width="6" stroke-dasharray="2.4 2.6" stroke-dashoffset="2.5"/>
-          <path class="hL" fill="none" stroke="#f6e6b4" stroke-width="1.4" stroke-dasharray="2.4 2.6" opacity=".85"/>
-          <path class="hR" fill="none" stroke="#f6e6b4" stroke-width="1.4" stroke-dasharray="2.4 2.6" stroke-dashoffset="2.5" opacity=".85"/>
-        </svg>
-        <div class="rim"></div>
-        <div class="pull"><i></i><b></b></div></div>
-        <div class="cap"><span class="lab">${k.world} · ${k.occ}</span><b>${tl(tot)}</b></div>`;
-      const q=s=>el.querySelector(s);
-      Object.assign(it,{fl:q('.flap.l'),fr:q('.flap.r'),svg:q('svg.teeth'),tpL:q('.tpL'),tpR:q('.tpR'),tL:q('.tL'),tR:q('.tR'),hL:q('.hL'),hR:q('.hR'),
-        pull:q('.pull'),dark:q('.dark'),body:q('.body')});
-      bindPull(it); setPull(it);
-      loadKombinImage(k._raw).then(src=>{ q('.inside').src=src||(k.p[0]?.imgs?.[0]||''); }); }
-    stage.appendChild(el); return it; });
-  layout();
-}
-function layout(){
-  vw=innerWidth;vh=innerHeight;mobile=vw<860;
-  bH=Math.round(vh*.56);bW=Math.round(bH*9/16);gap=Math.round(bW*(mobile?.16:.3));
-  let x=0; items.forEach(it=>{
-    const w=it.k?bW:Math.round(bW*.72), s=it.k?bW*.4/100:w/100;
-    it.w=w; it.x=x+w/2; x+=w+gap;
-    it.el.style.width=w+'px'; it.el.style.marginLeft=(-w/2)+'px';
-    const old=it.el.querySelector('.hook'); if(old) old.remove();
-    it.el.insertAdjacentHTML('afterbegin',hookSVG(s,!it.k,false));
-    if(!it.front){it.front=document.createElement('div');it.front.className='fh';$('#fronts').appendChild(it.front);}
-    it.front.style.width=w+'px'; it.front.style.marginLeft=(-w/2)+'px'; it.front.innerHTML=hookSVG(s,!it.k,true);
-    if(it.k){ it.el.style.paddingTop=(27*s)+'px'; it.body.style.height=bH+'px';
-      it.svg.setAttribute('width',bW); it.svg.setAttribute('height',bH); it.svg.setAttribute('viewBox',`0 0 ${bW} ${bH}`); zip(it,it.p,true); }
-    else it.el.style.height=(50*s)+'px';
-  });
-  const bags=items.filter(i=>i.k); const mid=bags.length?bags[Math.floor((bags.length-1)/2)].x:(x-gap)/2;
-  total=x-gap; oxT=ox=vw/2-mid; items.forEach(it=>{it.cx=it.x+ox});
-}
-addEventListener('resize',()=>{if(items.length)layout()});
-
-/* fermuar: p 0..1 (0 kapalı, 1 tamamen açık) */
-function zip(it,p,force){ if(!force&&Math.abs(p-it._p)<.0008)return; it._p=p;
-  const z=2+p*92, O=p*34, N=14; let L='0% 0%',R='100% 0%'; const pl=[],pr=[];
-  for(let i=0;i<=N;i++){const t=i/N,y=t*z,o=O*Math.pow(1-t,.75),xl=50-o,xr=50+o;
-    L+=`,${xl.toFixed(2)}% ${y.toFixed(2)}%`;R+=`,${xr.toFixed(2)}% ${y.toFixed(2)}%`; pl.push([xl,y]); pr.push([xr,y]);}
-  it.fl.style.clipPath=`polygon(${L},50% 100%,0% 100%)`; it.fr.style.clipPath=`polygon(${R},50% 100%,100% 100%)`;
-  const W=bW,H=bH, path=(pts,dx)=>pts.map((q,i)=>(i?'L':'M')+(q[0]/100*W+dx).toFixed(1)+' '+(q[1]/100*H).toFixed(1)).join('')+`L${(W/2+dx).toFixed(1)} ${H}`;
-  it.tpL.setAttribute('d',path(pl,-3.5)); it.tpR.setAttribute('d',path(pr,3.5));
-  it.tL.setAttribute('d',path(pl,1)); it.tR.setAttribute('d',path(pr,-1));
-  it.hL.setAttribute('d',path(pl,.2)); it.hR.setAttribute('d',path(pr,-1.8));
-  it.pull.style.top=z+'%'; it.dark.style.opacity=1-p*.92; }
-function bindPull(it){ let on=false,top=0,h=0,last=0;
-  it.pull.addEventListener('pointerdown',e=>{ if(sel!==it||body.dataset.s!=='focus')return; e.stopPropagation(); on=true; it.pull.setPointerCapture(e.pointerId);
-    const r=it.body.getBoundingClientRect(); top=r.top; h=r.height; });
-  it.pull.addEventListener('pointermove',e=>{ if(!on)return; it.pT=clamp((e.clientY-top-h*.02)/(h*.9));
-    if(Math.abs(it.pT-last)>.035){last=it.pT; navigator.vibrate&&navigator.vibrate(4);} $('#hint').style.opacity=it.pT>.05?0:'';
-    if(it.pT>=.5){ on=false; it.auto=true; it.pT=1; try{it.pull.releasePointerCapture(e.pointerId)}catch(_){} } });
-  const up=()=>{ if(!on)return; on=false; };
-  it.pull.addEventListener('pointerup',up); it.pull.addEventListener('pointercancel',up); }
-
-/* Gerçek fermuar başı: yeşil fonlu fotoğraf bir kez arka planından ayrılır ve kırpılır. */
-let PULL=null;
-(function keyPull(){ const im=new Image(); im.onload=()=>{ const c=document.createElement('canvas'); c.width=im.width; c.height=im.height;
-  const g=c.getContext('2d'); g.drawImage(im,0,0); const d=g.getImageData(0,0,c.width,c.height), a=d.data; let x0=c.width,y0=c.height,x1=0,y1=0;
-  for(let i=0;i<a.length;i+=4){ const r=a[i],gr=a[i+1],b=a[i+2],m=Math.max(r,b),k=gr-m;
-    const al=k>70?0:k>25?Math.round(255*(1-(k-25)/45)):255; if(gr>m)a[i+1]=m; a[i+3]=al;
-    if(al>60){const p=i/4,x=p%c.width,y=(p/c.width)|0; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;} }
-  g.putImageData(d,0,0); const o=document.createElement('canvas'); o.width=x1-x0+1; o.height=y1-y0+1; o.getContext('2d').drawImage(c,-x0,-y0);
-  PULL=o.toDataURL('image/png'); items.forEach(setPull); }; im.src='assets/img/zip-pull.png'; })();
-function setPull(it){ if(!PULL||!it.pull||it.pull.classList.contains('real'))return; it.pull.classList.add('real'); it.pull.insertAdjacentHTML('beforeend',`<img src="${PULL}" alt="">`); }
-
-/* sürükleme + seçim */
-let down=false,sx=0,sox=0,moved=0,lx=0,target=null;
-stage.addEventListener('pointerdown',e=>{ if(body.dataset.s!=='rail')return; down=true;sx=lx=e.clientX;sox=oxT;moved=0;vel=0;target=e.target.closest('.bag');stage.classList.add('drag');stage.setPointerCapture(e.pointerId); });
-stage.addEventListener('pointermove',e=>{ if(!down)return; const dx=e.clientX-lx; lx=e.clientX; moved=Math.max(moved,Math.abs(e.clientX-sx)); oxT=sox+(e.clientX-sx); vel=dx; items.forEach(it=>it.va+=dx*.012); });
-stage.addEventListener('pointerup',()=>{ if(!down)return; down=false;stage.classList.remove('drag'); if(moved<8&&target){const it=items.find(i=>i.el===target); if(it)focus(it);} else oxT+=vel*14; });
-stage.addEventListener('wheel',e=>{ if(body.dataset.s!=='rail')return; const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY; oxT-=d; items.forEach(it=>it.va-=d*.004); },{passive:true});
-
-function focus(it){ sel=it; it.el.classList.add('sel'); S('focus'); $('#hintT').textContent='Fermuarı tutup aşağı çekin'; $('#hint').style.opacity=''; }
-function open(it){ it.el.classList.add('peeled'); renderDP(it.k); S('open'); }
-function closeAll(){ if(!sel)return; const it=sel; it.el.classList.remove('peeled'); it.pT=0; S('rail'); $('#hintT').textContent='Kılıfları sağa sola itin, birine dokunun'; $('#hint').style.opacity='';
-  setTimeout(()=>{it.el.classList.remove('sel'); if(sel===it)sel=null;},50); }
-$('#back').onclick=closeAll;
-addEventListener('keydown',e=>{ if(e.key==='Escape'){ if($('#pm').classList.contains('on'))closePM(); else closeAll(); } });
-
-/* kare döngüsü */
-function frame(){
-  if(items.length){
-    const min=vw/2-items[items.length-1].x, max=vw/2-items[0].x;
-    if(!down){ if(oxT<min)oxT=lerp(oxT,min,.2); if(oxT>max)oxT=lerp(oxT,max,.2); }
-    const pox=ox; ox=lerp(ox,oxT,.12); const dv=ox-pox;
-    const st=body.dataset.s;
-    items.forEach(it=>{
-      it.va+=(-it.a*.045)-it.va*.06+(down?0:dv*.006); it.a+=it.va; it.a=clamp(it.a,-9,9);
-      let tx=it.x+ox, ts=1, ang=it.a;
-      if(it===sel&&st!=='rail'){ ang*=.3;
-        if(st==='focus'){tx=vw/2;ts=mobile?1.18:1.22;}
-        else{tx=mobile?vw/2:vw*.27;ts=mobile?.74:1.3;} }
-      it.cx=lerp(it.cx,tx,.11); it.cs=lerp(it.cs,ts,.11);
-      const tf=`translate3d(${it.cx}px,0,0) rotate(${ang.toFixed(3)}deg) scale(${it.cs.toFixed(4)})`;
-      it.el.style.transform=tf; it.front.style.transform=tf;
-      it.front.style.opacity=(st!=='rail'&&it!==sel)?0:1;
-      if(it.k){ it.p=lerp(it.p,it.pT,it.auto?.075:.22); if(Math.abs(it.p-it.pT)<.001)it.p=it.pT; zip(it,it.p);
-        if(it.auto&&it.p>.97){it.auto=false;open(it);} }
-    });
-  }
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-
-/* ---------- detay paneli ---------- */
-const picked={};
-function renderDP(k){
-  const tot=k.p.reduce((s,x)=>s+x.f,0), si=sizeIdx();
-  $('#dp').innerHTML=`<div><span class="lab">${k.world} · ${k.occ}</span><h2>${k.name}</h2><p class="d">${k.d}</p></div>
-   <div class="pcs">${k.p.map((x,i)=>{ if(!picked[x.k])picked[x.k]=x.s[Math.min(si,x.s.length-1)];
-     return `<button class="pc" data-k="${x.k}" style="--i:${i};--r:${[-3,2.5,-2,3][i%4]}deg;--fx:${mobile?0:-40}vw;--fy:${mobile?-30:0}vh">
-       <span class="ph"><img src="${x.imgs[0]||''}" alt="${x.n}" draggable="false"></span><span>${x.n}</span><em>${tl(x.f)} · <u data-sz="${x.k}">${picked[x.k]}</u></em></button>`}).join('')}</div>
-   ${k.x.length?`<div class="pair"><p>${pairingText(k.x.map(x=>({name:x.n})))}</p>
-     <div class="xs">${k.x.map(x=>{ if(!picked[x.k])picked[x.k]=x.s[Math.min(si,x.s.length-1)];
-       return `<label class="xi"><img src="${x.imgs[0]||''}" alt="" data-xk="${x.k}"><span><b>${x.n}</b><em>+${tl(x.f)}</em></span><input type="checkbox" data-x="${x.k}"><i></i></label>`}).join('')}</div>
-     <small>Kombin fiyatına dahil değildir; isterseniz ekleyin.</small></div>`:''}
-   <div class="seal"><i></i><span>Markalar mühürlü. Ödeme adımında, siz onaylamadan önce açıklanır.</span></div>
-   <div class="buy"><b id="dtot">${tl(tot)}</b><button class="btn" id="add">Kombini sepete ekle</button></div>`;
-  $$('#dp .pc').forEach(b=>b.onclick=()=>openPM(k,k.p.find(x=>x.k===b.dataset.k)));
-  $$('#dp [data-xk]').forEach(im=>im.onclick=e=>{e.preventDefault();openPM(k,k.x.find(x=>x.k===im.dataset.xk));});
-  const chosen=()=>$$('#dp [data-x]').filter(c=>c.checked).map(c=>c.dataset.x);
-  $$('#dp [data-x]').forEach(c=>c.onchange=()=>{ $('#dtot').textContent=tl(tot+chosen().reduce((s,id)=>s+k.x.find(x=>x.k===id).f,0)); });
-  $('#add').onclick=e=>{ const sizes={}; [...k.p,...k.x].forEach(x=>sizes[x.k]=picked[x.k]); addToCart(k.id,sizes,chosen());
-    e.target.outerHTML='<a class="btn ok" href="/sepet">Sepete eklendi · Sepete git →</a>'; };
-}
-
-/* ---------- parça penceresi ---------- */
-const strip=$('#strip');
-function openPM(k,x){
-  const imgs=x.imgs.length?x.imgs:[''];
-  strip.innerHTML=imgs.map(s=>`<img src="${s}" alt="${x.n}" draggable="false">`).join('');
-  $('#dots').innerHTML=imgs.map((_,i)=>`<i class="${i?'':'on'}"></i>`).join(''); strip.scrollLeft=0;
-  const rec=x.s[Math.min(sizeIdx(),x.s.length-1)];
-  $('#inf').innerHTML=`<span class="lab">${k.world} · ${k.name}</span><h3>${x.n}</h3><div class="pr">${tl(x.f)}</div>
-   <div><span class="lab" style="display:block;margin-bottom:12px">Beden</span><div class="sz">${x.s.map(s=>`<button class="${s===picked[x.k]?'on':''}">${s}</button>`).join('')}</div></div>
-   <small>${x.s.length>1?`Ölçülerinize göre önerimiz: <b>${rec}</b>. Her parçanın bedenini ayrı seçebilirsiniz.<br>`:''}Markası ödeme adımında açıklanır.</small>
-   <button class="btn" id="pok">Tamam</button>`;
-  $$('#inf .sz button').forEach(b=>b.onclick=()=>{$$('#inf .sz button').forEach(q=>q.classList.remove('on'));b.classList.add('on');picked[x.k]=b.textContent;
-    const u=document.querySelector(`[data-sz="${x.k}"]`); if(u)u.textContent=b.textContent;});
-  $('#pok').onclick=closePM; $('#pm').classList.add('on');
-}
-function closePM(){$('#pm').classList.remove('on')}
-$('#px').onclick=closePM; $('#pm').addEventListener('click',e=>{if(e.target.id==='pm')closePM()});
-const gi=()=>Math.round(strip.scrollLeft/strip.clientWidth);
-strip.addEventListener('scroll',()=>{const i=gi();[...$('#dots').children].forEach((d,j)=>d.classList.toggle('on',j===i))},{passive:true});
-$('#gp').onclick=()=>strip.scrollTo({left:(gi()-1)*strip.clientWidth,behavior:'smooth'});
-$('#gn').onclick=()=>strip.scrollTo({left:(gi()+1)*strip.clientWidth,behavior:'smooth'});
 
 /* Tercihler daha önce kaydedildiyse sorular atlanır; #gardirop test kısayoludur. */
 function skipIntro(){steps[si].classList.remove('on');si=steps.length-1;steps[si].classList.add('on');finish();}

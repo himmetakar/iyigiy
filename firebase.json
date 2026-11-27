@@ -21,6 +21,9 @@
       ".claude/**"
     ],
     "cleanUrls": true,
+    "rewrites": [
+      { "source": "/*", "destination": "/magaza.html" }
+    ],
     "headers": [
       { "source": "**/*.@(jpg|png|webp)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
       { "source": "**/*.@(js|css|html)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
