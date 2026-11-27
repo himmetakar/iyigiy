@@ -4,7 +4,7 @@ import {
   WORLDS, CATEGORIES, TYPES, STYLES, OCCASIONS, STATUS, RET_STATUS, tl, pct, esc, fmtDate, toDate, toast, $, $$,
   loadCatalog, loadKombinImage, kombinTotal, commissionLines, round2, uid8
 } from './app.js';
-import { suggestKombins, COLORS } from './engine.js';
+import { suggestKombins, COLORS, usageMap as engineUsage, currentRound } from './engine.js';
 
 const { doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp, writeBatch } = fs;
 mountNav('admin');
@@ -94,7 +94,7 @@ async function urunler(v) {
     <div class="row" style="margin:20px 0"><input class="in" id="q" placeholder="Ürün ya da marka ara" style="max-width:320px">
      <select class="in" id="fw" style="max-width:170px"><option value="">Tüm dünyalar</option>${opt(WORLDS)}</select>
      <select class="in" id="fc" style="max-width:170px"><option value="">Tüm kategoriler</option>${opt(CATEGORIES)}</select></div>
-    <div class="card scroll"><table class="tbl"><thead><tr><th>Görsel</th><th>Ürün</th><th>Marka</th><th>Tür</th><th>Dünya</th><th>Renk / tarz</th><th class="num">Fiyat</th><th class="num">Kombin</th><th></th></tr></thead>
+    <div class="card scroll"><table class="tbl"><thead><tr><th>Görsel</th><th>Ürün</th><th>Marka</th><th>Tür</th><th>Dünya</th><th>Renk / tarz</th><th class="num">Fiyat</th><th class="num">Kullanıldığı kombin</th><th></th></tr></thead>
     <tbody id="tb"></tbody></table></div>`;
   const draw = () => {
     const q = $('#q').value.toLocaleLowerCase('tr'), fw = $('#fw').value, fc = $('#fc').value;
@@ -105,7 +105,7 @@ async function urunler(v) {
       <td>${esc(p.brand)}</td><td>${esc(TYPES[p.type]?.label.split(' (')[0] || p.type)}<div class="muted" style="font-size:12px">${p.gender === 'kadin' ? 'Kadın' : p.gender === 'erkek' ? 'Erkek' : 'Unisex'}</div></td>
       <td><span class="badge gold">${WORLDS[p.world] || '-'}</span></td>
       <td style="font-size:12px">${(p.colors || []).join(', ')}<div class="muted">${(p.styles || []).join(', ')}</div></td>
-      <td class="num">${tl(p.price)}</td><td class="num">${usage[p.id] || 0} / ${S.maxUsage ?? 3}</td>
+      <td class="num">${tl(p.price)}</td><td class="num">${usage[p.id] || 0}</td>
       <td class="num"><button class="btn sm ghost" data-e="${p.id}">Düzenle</button> ${p.active === false ? '<span class="badge bad">Pasif</span>' : ''}</td></tr>`).join('') || `<tr><td colspan="9"><div class="empty">Ürün yok. "Ürün ekle" ile başla ya da Araçlar sekmesinden örnek verileri yükle.</div></td></tr>`;
     $$('[data-e]').forEach(b => b.onclick = () => productForm(CAT.products[b.dataset.e]));
   };
@@ -113,11 +113,7 @@ async function urunler(v) {
   $('#add').onclick = () => productForm(null);
 }
 function opt(o, sel) { return Object.entries(o).map(([k, l]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${l}</option>`).join(''); }
-function usageMap() {
-  const u = {};
-  CAT.kombins.filter(k => k.status !== 'arsiv').forEach(k => (k.productIds || []).forEach(id => u[id] = (u[id] || 0) + 1));
-  return u;
-}
+const usageMap = () => engineUsage(CAT.kombins);
 function chipSet(id, all, sel = []) {
   return `<div class="chips" id="${id}">${all.map(x => `<button type="button" class="chip ${sel.includes(x) ? 'on' : ''}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
 }
@@ -183,37 +179,57 @@ function compressDataUrl(src, max, q) {
 async function oneriler(v) {
   const pend = CAT.kombins.filter(k => ['oneri', 'gorsel_bekliyor', 'gorsel_onay'].includes(k.status));
   const key = localStorage.getItem('iy_gemini_key');
+  const P = Object.values(CAT.products);
   v.innerHTML = `<div class="lab">Sistem önerir, sen onaylarsın</div><h2 style="margin:8px 0 18px">Kombin önerileri</h2>
+   <div class="grid g2" style="margin-bottom:14px">${stat('Kadın · aktif tur', currentRound(P, CAT.kombins, 'kadin') + '. tur', pend.filter(k => k.gender === 'kadin' && k.status === 'oneri').length + ' öneri bekliyor')}
+    ${stat('Erkek · aktif tur', currentRound(P, CAT.kombins, 'erkek') + '. tur', pend.filter(k => k.gender === 'erkek' && k.status === 'oneri').length + ' öneri bekliyor')}</div>
    <div class="card gold"><div class="row">
      <select class="in" id="og" style="max-width:150px">${opt({ kadin: 'Kadın', erkek: 'Erkek' })}</select>
      <select class="in" id="ow" style="max-width:170px"><option value="">Tüm dünyalar</option>${opt(WORLDS)}</select>
      <select class="in" id="on" style="max-width:130px">${[3, 6, 10, 15].map(n => `<option>${n}</option>`).join('')}</select>
      <button class="btn" id="gen">Yeni öneri üret</button></div>
-     <p class="muted" style="font-size:12.5px;margin-top:12px;line-height:1.6">Sistem aktif ürünleri renk uyumu, tarz ve marka dünyasına göre birleştirir. Bir ürün en fazla ${S.maxUsage ?? 3} kombinde kullanılır (Ayarlar'dan değişir). Akış: <b>Öneri</b> → onayla → <b>görsel üret</b> → görseli onayla → <b>yayında</b>.</p>
+     <p class="muted" style="font-size:12.5px;margin-top:12px;line-height:1.7">Her turda bir ürün yalnızca 1 kombinde kullanılır; o turda kombin kurulamayınca sistem sonraki tura geçer (2., 3., 4. tur…). Bir öneriyi onaylayınca ya da reddedince, kuyrukta ${S.queueSize ?? 6} öneri olacak şekilde yenisi otomatik gelir.
+     Kadın kombinlerine her zaman bir çanta ve bir aksesuar eşlik eder; bunlar <b>fiyata dahil değildir</b>, müşteri isterse ekler.<br>Akış: <b>Öneri</b> → onayla → <b>görsel üret</b> → görseli onayla → <b>yayında</b>.</p>
      ${key ? '' : '<p style="font-size:13px;margin-top:8px;color:var(--warn)">Görsel üretmek için Ayarlar sekmesine Gemini API anahtarını gir (yalnızca bu tarayıcıda saklanır).</p>'}</div>
    <div id="plist" style="margin-top:22px;display:grid;gap:14px"></div>`;
   $('#gen').onclick = async () => {
-    const s = suggestKombins(Object.values(CAT.products), CAT.kombins, { gender: $('#og').value, world: $('#ow').value || null, count: +$('#on').value, maxUse: S.maxUsage ?? 3 });
-    if (!s.length) return toast('Uygun öneri çıkmadı: bu filtre için yeterli aktif ürün yok (üst, alt, ayakkabı gerekli).', 'bad');
-    const b = writeBatch(db);
-    s.forEach(k => b.set(doc(collection(db, 'kombins')), { ...k, status: 'oneri', createdAt: serverTimestamp() }));
-    await b.commit(); await reloadCatalog(); go('oneriler'); badges(); toast(s.length + ' yeni öneri eklendi');
+    const n = await addSuggestions($('#og').value, +$('#on').value, $('#ow').value || null);
+    if (!n) return toast($('#og').value === 'kadin' ? 'Öneri çıkmadı: kadın kombini için üst+alt (ya da elbise), bir çanta ve bir aksesuar gerekli.' : 'Öneri çıkmadı: yeterli aktif ürün yok (üst+alt ya da elbise gerekli).', 'bad');
+    await reloadCatalog(); go('oneriler'); badges(); toast(n + ' yeni öneri eklendi');
   };
   const L = $('#plist');
   if (!pend.length) { L.innerHTML = '<div class="empty">Bekleyen öneri yok.</div>'; return; }
   for (const k of pend.sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0))) L.appendChild(proposalCard(k));
 }
+async function addSuggestions(gender, count, world = null) {
+  const s = suggestKombins(Object.values(CAT.products), CAT.kombins, { gender, world, count });
+  if (!s.length) return 0;
+  const b = writeBatch(db);
+  s.forEach(k => b.set(doc(collection(db, 'kombins')), { ...k, status: 'oneri', createdAt: serverTimestamp() }));
+  await b.commit(); return s.length;
+}
+// Onay ya da ret sonrası kuyruğu hedef sayıya tamamlar.
+async function topUp(gender) {
+  await reloadCatalog();
+  const waiting = CAT.kombins.filter(k => k.gender === gender && k.status === 'oneri').length;
+  const need = Math.max(0, (S.queueSize ?? 6) - waiting);
+  const n = need ? await addSuggestions(gender, need) : 0;
+  await reloadCatalog();
+  if (n) toast(n + ' yeni öneri kuyruğa eklendi');
+}
 function proposalCard(k) {
   const el = document.createElement('div'); el.className = 'card';
   const ps = (k.productIds || []).map(id => CAT.products[id]).filter(Boolean);
+  const ex = (k.extraIds || []).map(id => CAT.products[id]).filter(Boolean);
   const st = { oneri: ['Öneri', 'warn'], gorsel_bekliyor: ['Görsel bekliyor', 'gold'], gorsel_onay: ['Görsel onayı', 'gold'] }[k.status];
   el.innerHTML = `<div class="kprop"><div class="im" data-im>${k.status === 'oneri' ? 'Önce kombini onayla' : 'Görsel yok'}</div><div>
-    <div class="between"><div class="row"><span class="badge ${st[1]}">${st[0]}</span><span class="badge gold">${WORLDS[k.world]}</span><span class="badge">${k.gender === 'erkek' ? 'Erkek' : 'Kadın'}</span><span class="muted" style="font-size:12px">Puan ${k.score ?? '-'}</span></div><b class="serif" style="font-size:22px;color:var(--gold2)">${tl(kombinTotal(k, CAT.products))}</b></div>
+    <div class="between"><div class="row"><span class="badge ${st[1]}">${st[0]}</span><span class="badge gold">${WORLDS[k.world]}</span><span class="badge">${k.gender === 'erkek' ? 'Erkek' : 'Kadın'}</span>${k.round ? `<span class="badge">${k.round}. tur</span>` : ''}<span class="muted" style="font-size:12px">Puan ${k.score ?? '-'}</span></div><b class="serif" style="font-size:22px;color:var(--gold2)">${tl(kombinTotal(k, CAT.products))}</b></div>
     <div class="grid g2" style="margin-top:12px">
       <label class="f">Kombin adı<input class="in" data-f="name" value="${esc(k.name)}"></label>
       <label class="f">Kullanım alanı<select class="in" data-f="occ">${OCCASIONS.map(o => `<option ${o === k.occ ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
       <label class="f" style="grid-column:1/-1">Açıklama<input class="in" data-f="desc" value="${esc(k.desc || '')}"></label></div>
     <div class="pieces">${ps.map(p => `<div class="pc"><img src="${esc(p.images?.[0] || '')}">${esc(p.name)}<br><span style="color:var(--gold2)">${tl(p.price)}</span></div>`).join('')}</div>
+    ${ex.length ? `<div class="lab" style="margin-top:14px">Eşlik eden · fiyata dahil değil</div><div class="pieces">${ex.map(p => `<div class="pc"><img src="${esc(p.images?.[0] || '')}">${esc(p.name)}<br><span class="muted">+${tl(p.price)}</span></div>`).join('')}</div>` : ''}
     <div class="row" style="margin-top:16px" data-act></div></div></div>`;
   const im = el.querySelector('[data-im]');
   if (k.image) loadKombinImage(k).then(src => { if (src) im.innerHTML = `<img src="${src}">`; });
@@ -221,19 +237,20 @@ function proposalCard(k) {
   const act = el.querySelector('[data-act]');
   const btn = (txt, cls, fn) => { const b = document.createElement('button'); b.className = 'btn sm ' + cls; b.textContent = txt; b.onclick = () => fn(b); act.appendChild(b); };
   if (k.status === 'oneri') {
-    btn('Kombini onayla', '', async () => { await updateDoc(doc(db, 'kombins', k.id), { ...save(), status: 'gorsel_bekliyor' }); await reloadCatalog(); go('oneriler'); badges(); });
-    btn('Reddet', 'danger', async () => { await deleteDoc(doc(db, 'kombins', k.id)); await reloadCatalog(); go('oneriler'); badges(); });
+    btn('Kombini onayla', '', async b => { b.disabled = true; await updateDoc(doc(db, 'kombins', k.id), { ...save(), status: 'gorsel_bekliyor' }); await topUp(k.gender); go('oneriler'); badges(); });
+    // Reddedilen kombin silinmez, "red" olarak saklanır: aynı kombin bir daha önerilmez.
+    btn('Reddet', 'danger', async b => { b.disabled = true; await updateDoc(doc(db, 'kombins', k.id), { status: 'red', rejectedAt: serverTimestamp() }); await topUp(k.gender); go('oneriler'); badges(); });
   } else {
     btn(k.image ? 'Görseli yeniden üret' : 'Görsel üret', k.image ? 'ghost' : '', async b => {
       b.disabled = true; b.textContent = 'Üretiliyor… (30-60 sn)';
-      try { await updateDoc(doc(db, 'kombins', k.id), save()); await generateImage(k, ps); await reloadCatalog(); go('oneriler'); toast('Görsel üretildi'); }
+      try { await updateDoc(doc(db, 'kombins', k.id), save()); await generateImage(k, [...ps, ...ex]); await reloadCatalog(); go('oneriler'); toast('Görsel üretildi'); }
       catch (e) { console.error(e); toast('Görsel üretilemedi: ' + e.message, 'bad'); b.disabled = false; b.textContent = 'Tekrar dene'; }
     });
     if (k.status === 'gorsel_onay') btn('Görseli onayla ve yayına al', '', async () => {
       await updateDoc(doc(db, 'kombins', k.id), { ...save(), status: 'yayinda', publishedAt: serverTimestamp() }); await reloadCatalog(); go('oneriler'); badges(); toast('Kombin yayında');
     });
     btn('Kaydet', 'ghost', async () => { await updateDoc(doc(db, 'kombins', k.id), save()); toast('Kaydedildi'); });
-    btn('Reddet', 'danger', async () => { if (!confirm('Kombin silinsin mi?')) return; await deleteDoc(doc(db, 'kombins', k.id)); await reloadCatalog(); go('oneriler'); badges(); });
+    btn('Reddet', 'danger', async () => { if (!confirm('Kombin reddedilsin mi?')) return; await updateDoc(doc(db, 'kombins', k.id), { status: 'red', rejectedAt: serverTimestamp() }); await topUp(k.gender); go('oneriler'); badges(); });
   }
   return el;
 }
@@ -456,7 +473,7 @@ async function ayarlar(v) {
      <label class="f">İade süresi (gün)<input class="in" type="number" id="srw" value="${S.returnWindowDays}"></label></div>
     <div class="lab" style="margin-top:22px">Kombin üretimi ve vitrin</div>
     <div class="grid g2" style="margin-top:12px">
-     <label class="f">Bir ürün en fazla kaç kombinde<input class="in" type="number" id="smu" value="${S.maxUsage ?? 3}"></label>
+     <label class="f">Kuyrukta bekleyen öneri sayısı (cinsiyet başına)<input class="in" type="number" id="smu" value="${S.queueSize ?? 6}"></label>
      <label class="f">Günlük öneride kombin sayısı<input class="in" type="number" id="sdc" value="${S.dailyCount}"></label></div></div>
    </div>
    <div class="row" style="margin-top:18px"><button class="btn" id="ssave">Ayarları kaydet</button></div>
@@ -469,7 +486,7 @@ async function ayarlar(v) {
     const commissions = {}, kdv = {};
     $$('[data-c]').forEach(i => commissions[i.dataset.c] = +i.value); $$('[data-k]').forEach(i => kdv[i.dataset.k] = +i.value);
     const data = { commissions, kdv, offLinkRate: +$('#sol').value, cookieHours: +$('#sck').value, stopaj: +$('#sst').value,
-      freeReturnsPerMonth: +$('#sfr').value, returnFee: +$('#srf').value, returnWindowDays: +$('#srw').value, maxUsage: +$('#smu').value, dailyCount: +$('#sdc').value, updatedAt: serverTimestamp() };
+      freeReturnsPerMonth: +$('#sfr').value, returnFee: +$('#srf').value, returnWindowDays: +$('#srw').value, queueSize: +$('#smu').value, dailyCount: +$('#sdc').value, updatedAt: serverTimestamp() };
     await setDoc(doc(db, 'settings', 'main'), data, { merge: true }); resetSettingsCache(); S = await getSettings(); toast('Ayarlar kaydedildi');
   };
   $('#gsave').onclick = () => { localStorage.setItem('iy_gemini_key', $('#gk').value.trim()); localStorage.setItem('iy_gemini_model', $('#gm').value); toast('Gemini ayarı bu tarayıcıya kaydedildi'); };
@@ -483,7 +500,7 @@ async function araclar(v) {
   $('#seed').onclick = async b => { $('#seed').disabled = true; try { await seed(); await reloadCatalog(); toast('Örnek veriler yüklendi'); go('kombinler'); } catch (e) { toast(e.message, 'bad'); $('#seed').disabled = false; } };
 }
 async function seed() {
-  await setDoc(doc(db, 'settings', 'main'), { ...DEFAULT_SETTINGS, maxUsage: 3 }, { merge: true });
+  await setDoc(doc(db, 'settings', 'main'), { ...DEFAULT_SETTINGS }, { merge: true });
   const W = ['XS', 'S', 'M', 'L', 'XL'], WN = ['34', '36', '38', '40', '42'], MT = ['S', 'M', 'L', 'XL', 'XXL'], MP = ['30', '31', '32', '34', '36'];
   const img = k => [1, 2, 3].map(i => `/assets/koton/${k}-${i}.jpg`);
   const P = {
@@ -501,8 +518,8 @@ async function seed() {
   const b = writeBatch(db);
   for (const [id, p] of Object.entries(P)) b.set(doc(db, 'products', id), { ...p, brand: 'Koton', category: TYPES[p.type].cat, images: img(id), active: true, demo: true, createdAt: serverTimestamp() });
   const K = [
-    { id: 'demo-1', name: 'Gri Kaban Günü', occ: 'Ofis', desc: 'Gri kaşe kabanın altında siyah saten ve dar paça. Toplantıdan yemeğe değiştirmeden gider.', gender: 'kadin', world: 'tanidik', styles: ['Ofis', 'Klasik'], productIds: ['k1_kaban', 'k1_gomlek', 'k1_pantolon', 'k1_canta'], image: '/assets/img/kombin-1.jpg' },
-    { id: 'demo-2', name: 'Sonbahar Yürüyüşü', occ: 'Hafta sonu', desc: 'Kahve bomber, bordo midi etek ve süet çanta. Sıcak tonlar, rahat bir kesim.', gender: 'kadin', world: 'kesif', styles: ['Günlük'], productIds: ['k2_ceket', 'k2_etek', 'k2_canta'], image: '/assets/img/kombin-2.jpg' },
+    { id: 'demo-1', name: 'Gri Kaban Günü', occ: 'Ofis', desc: 'Gri kaşe kabanın altında siyah saten ve dar paça. Toplantıdan yemeğe değiştirmeden gider.', gender: 'kadin', world: 'tanidik', styles: ['Ofis', 'Klasik'], productIds: ['k1_kaban', 'k1_gomlek', 'k1_pantolon'], extraIds: ['k1_canta'], image: '/assets/img/kombin-1.jpg' },
+    { id: 'demo-2', name: 'Sonbahar Yürüyüşü', occ: 'Hafta sonu', desc: 'Kahve bomber ve bordo midi etek. Sıcak tonlar, rahat bir kesim.', gender: 'kadin', world: 'kesif', styles: ['Günlük'], productIds: ['k2_ceket', 'k2_etek'], extraIds: ['k2_canta'], image: '/assets/img/kombin-2.jpg' },
     { id: 'demo-3', name: 'Siyahın Üç Hali', occ: 'Akşam ve davet', desc: 'Kaşe ceket, pamuk gömlek, pileli pantolon. Üçü de siyah, üçü de farklı dokuda.', gender: 'erkek', world: 'imza', styles: ['Davet', 'Minimal'], productIds: ['k3_ceket', 'k3_gomlek', 'k3_pantolon'], image: '/assets/img/kombin-3.jpg' }
   ];
   for (const k of K) { const { id, ...d } = k; b.set(doc(db, 'kombins', id), { ...d, status: 'yayinda', demo: true, score: 10, createdAt: serverTimestamp(), publishedAt: serverTimestamp() }); }

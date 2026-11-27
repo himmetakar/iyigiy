@@ -18,15 +18,19 @@ onUser(async u => {
 function lines() {
   return getCart().map(c => ({ c, k: CAT.kombins.find(k => k.id === c.kombinId) })).filter(x => x.k);
 }
+// Kombinin ana parçaları + müşterinin eklediği eşlik eden ürünler
+const chosenExtras = (c, k) => (c.extras || []).filter(id => (k.extraIds || []).includes(id)).map(id => CAT.products[id]).filter(Boolean);
+const lineProducts = (c, k) => [...k.productIds.map(id => CAT.products[id]).filter(Boolean), ...chosenExtras(c, k)];
+const lineTotal = (c, k) => lineProducts(c, k).reduce((s, p) => s + (+p.price || 0), 0);
 function render() {
   const L = lines();
   if (!L.length) { root.innerHTML = `<div class="lab">Sepet</div><h1 style="margin:8px 0 24px">Sepetiniz boş</h1><div class="empty">Gardırobunuzdan bir kombin seçin. <a class="link" href="/">Gardıroba git</a> · <a class="link" href="/kombinler">Tüm kombinler</a></div>`; return; }
-  const total = L.reduce((s, x) => s + kombinTotal(x.k, CAT.products), 0);
+  const total = L.reduce((s, x) => s + lineTotal(x.c, x.k), 0);
   const a = prof.address || {};
   root.innerHTML = `<div class="lab">Sepet</div><h1 style="margin:8px 0 26px">${L.length} kombin</h1>
    <div class="lay"><div id="items"></div>
    <aside class="card gold sum"><div class="lab">Sipariş özeti</div>
-    ${L.map(x => `<div class="r"><span>${esc(x.k.name)}</span><span>${tl(kombinTotal(x.k, CAT.products))}</span></div>`).join('')}
+    ${L.map(x => `<div class="r"><span>${esc(x.k.name)}${chosenExtras(x.c, x.k).length ? ` <span class="muted">+ ${chosenExtras(x.c, x.k).length} eşlik eden</span>` : ''}</span><span>${tl(lineTotal(x.c, x.k))}</span></div>`).join('')}
     <div class="r"><span class="muted">Kargo</span><span class="muted">Ücretsiz</span></div>
     <div class="sep" style="margin:10px 0"></div><div class="r" style="align-items:baseline"><span>Toplam</span><span class="t">${tl(total)}</span></div>
     <div class="sep"></div>
@@ -37,7 +41,7 @@ function render() {
       <label class="f">Açık adres<textarea class="in" id="al">${esc(a.line || '')}</textarea></label></div>
      <div class="sep"></div>
      <div class="seal"><i></i><div><div class="lab">Mühür açıldı</div><div style="font-size:13px;margin-top:4px">Paketinizdeki markalar</div></div></div>
-     <div class="brands">${L.flatMap(x => x.k.productIds.map(id => CAT.products[id]).filter(Boolean).map(p => `<div><span>${esc(p.name)}</span><b>${esc(p.brand)}</b></div>`)).join('')}</div>
+     <div class="brands">${L.flatMap(x => lineProducts(x.c, x.k).map(p => `<div><span>${esc(p.name)}</span><b>${esc(p.brand)}</b></div>`)).join('')}</div>
      <div class="sep"></div>
      <label class="check"><input type="checkbox" id="c1"> <span><a class="link" data-doc="on">Ön bilgilendirme formunu</a> okudum.</span></label>
      <label class="check" style="margin-top:8px"><input type="checkbox" id="c2"> <span><a class="link" data-doc="ms">Mesafeli satış sözleşmesini</a> onaylıyorum.</span></label>
@@ -50,9 +54,15 @@ function render() {
   L.forEach(({ c, k }) => {
     const el = document.createElement('div'); el.className = 'card ci';
     const ps = k.productIds.map(id => CAT.products[id]).filter(Boolean);
+    const xs = (k.extraIds || []).map(id => CAT.products[id]).filter(Boolean);
+    const row = p => `<div class="pp"><span>${esc(p.name)}</span><select class="in" data-p="${p.id}">${(p.sizes?.length ? p.sizes : ['Tek beden']).map(s => `<option ${s === (c.sizes?.[p.id] || recommendSize(p.sizes, prof.h || localProfile().h, prof.k || localProfile().k)) ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select><span style="text-align:right">${tl(p.price)}</span></div>`;
     el.innerHTML = `<div class="im" data-im></div><div><div class="between"><div><span class="lab">${WORLDS[k.world]} · ${esc(k.occ || '')}</span><h3 style="margin-top:6px">${esc(k.name)}</h3></div>
       <button class="link" data-rm style="font-size:13px">Kaldır</button></div>
-      <div style="margin-top:12px">${ps.map(p => `<div class="pp"><span>${esc(p.name)}</span><select class="in" data-p="${p.id}">${(p.sizes || []).map(s => `<option ${s === (c.sizes?.[p.id] || recommendSize(p.sizes, prof.h || localProfile().h, prof.k || localProfile().k)) ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select><span style="text-align:right">${tl(p.price)}</span></div>`).join('')}</div></div>`;
+      <div style="margin-top:12px">${ps.map(row).join('')}</div>
+      ${xs.length ? `<div class="lab" style="margin-top:16px">Birlikte iyi gider · fiyata dahil değil</div>
+        <div style="margin-top:6px">${xs.map(p => `<div class="pp"><label class="check" style="color:var(--paper)"><input type="checkbox" data-x="${p.id}" ${(c.extras || []).includes(p.id) ? 'checked' : ''}> ${esc(p.name)}</label><select class="in" data-p="${p.id}">${(p.sizes?.length ? p.sizes : ['Tek beden']).map(s => `<option ${s === c.sizes?.[p.id] ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select><span style="text-align:right">+${tl(p.price)}</span></div>`).join('')}</div>` : ''}</div>`;
+    el.querySelectorAll('[data-x]').forEach(x => x.onchange = () => { const cart = getCart(); const it = cart.find(q => q.kombinId === k.id);
+      it.extras = el.querySelectorAll('[data-x]').length ? [...el.querySelectorAll('[data-x]')].filter(q => q.checked).map(q => q.dataset.x) : []; setCart(cart); render(); });
     loadKombinImage(k).then(s => { if (s) el.querySelector('[data-im]').style.backgroundImage = `url("${s}")`; });
     el.querySelector('[data-rm]').onclick = () => { setCart(getCart().filter(x => x.kombinId !== k.id)); render(); };
     el.querySelectorAll('[data-p]').forEach(s => s.onchange = () => { const cart = getCart(); const it = cart.find(x => x.kombinId === k.id); it.sizes = { ...(it.sizes || {}), [s.dataset.p]: s.value }; setCart(cart); });
@@ -75,7 +85,8 @@ async function checkout() {
   const b = $('#buy'); b.disabled = true; b.textContent = 'Kaydediliyor…';
   try {
     const items = lines().map(({ c, k }) => ({ kombinId: k.id, name: k.name, world: k.world,
-      products: k.productIds.map(id => CAT.products[id]).filter(Boolean).map(p => ({ pid: p.id, name: p.name, brand: p.brand, category: p.category, price: p.price, size: c.sizes?.[p.id] || p.sizes?.[0] || '' })) }));
+      products: lineProducts(c, k).map(p => ({ pid: p.id, name: p.name, brand: p.brand, category: p.category, price: p.price, size: c.sizes?.[p.id] || p.sizes?.[0] || 'Tek beden',
+        ...((k.extraIds || []).includes(p.id) ? { extra: true } : {}) })) }));
     const total = round2(items.reduce((s, i) => s + i.products.reduce((a, p) => a + p.price, 0), 0));
     const ref = await activeRef();
     const order = { uid: U.uid, email: U.email, items, total, address: addr, status: 'alindi', payment: 'test',

@@ -58,7 +58,8 @@ export const DEFAULT_SETTINGS = {
   returnFee: 79,           // ücretsiz hak dolduktan sonra her iade/değişim için TL
   freeReturnsPerMonth: 1,
   returnWindowDays: 14,
-  dailyCount: 9            // günlük öneride gösterilecek kombin sayısı
+  dailyCount: 9,           // günlük öneride gösterilecek kombin sayısı
+  queueSize: 6             // admin kuyruğunda cinsiyet başına bekleyen öneri sayısı
 };
 
 let _settings = null;
@@ -142,9 +143,17 @@ export function saveLocalProfile(p) { localStorage.setItem('iy_profile', JSON.st
 /* ---------------- sepet ---------------- */
 export function getCart() { try { return JSON.parse(localStorage.getItem('iy_cart') || '[]'); } catch { return []; } }
 export function setCart(c) { localStorage.setItem('iy_cart', JSON.stringify(c)); updateCartBadge(); }
-export function addToCart(kombinId, sizes) {
+export function addToCart(kombinId, sizes, extras = []) {
   const c = getCart().filter(x => x.kombinId !== kombinId);
-  c.push({ kombinId, sizes, at: Date.now() }); setCart(c);
+  c.push({ kombinId, sizes, extras, at: Date.now() }); setCart(c);
+}
+// Kombine eşlik eden (fiyata dahil olmayan) ürünler
+export const extrasOf = (k, products) => (k.extraIds || []).map(id => products[id]).filter(Boolean);
+export function pairingText(extras) {
+  if (!extras.length) return '';
+  const names = extras.map(p => p.name.toLocaleLowerCase('tr'));
+  const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' ve ' + names.at(-1) : names[0];
+  return `Bu kombinle ${list} harika görünür. Birlikte almak ister misiniz?`;
 }
 export function updateCartBadge() {
   const n = getCart().length;

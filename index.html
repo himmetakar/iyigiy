@@ -115,6 +115,19 @@ body[data-s=open] .pc{animation:fly 1.1s var(--ease) forwards;animation-delay:ca
 .pc em u{color:var(--gold2);text-underline-offset:3px}
 .seal{display:flex;gap:12px;align-items:center;font-size:13px;color:var(--soft);line-height:1.5}
 .seal i{flex:0 0 26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f6e6b4,#c9a45c 45%,#6e5426);box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.pair{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:rgba(201,164,92,.04)}
+.pair p{font-family:var(--serif);font-size:17px;line-height:1.35}
+.pair small{display:block;font-size:11.5px;color:var(--soft);margin-top:8px}
+.pair .xs{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.pair .xi{display:flex;align-items:center;gap:10px;padding:8px 12px 8px 8px;border:1px solid var(--line2);border-radius:10px;cursor:pointer;position:relative;transition:.25s}
+.pair .xi img{width:40px;height:52px;object-fit:cover;border-radius:6px}
+.pair .xi span{display:flex;flex-direction:column;font-size:12.5px;line-height:1.3}
+.pair .xi em{font-style:normal;color:var(--soft);font-size:12px}
+.pair .xi input{position:absolute;opacity:0}
+.pair .xi i{width:18px;height:18px;border-radius:5px;border:1px solid var(--gold3);margin-left:6px;display:grid;place-items:center}
+.pair .xi:has(input:checked){border-color:var(--gold);background:rgba(201,164,92,.08)}
+.pair .xi:has(input:checked) i{background:var(--gold)}
+.pair .xi:has(input:checked) i::after{content:"✓";color:#14110c;font-size:12px;font-style:normal}
 .buy{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 .buy b{font-family:var(--serif);font-weight:400;font-size:30px;color:var(--gold2)}
 .btn{background:linear-gradient(135deg,#ecd8a6,#c9a45c 55%,#a8853f);color:#14110c;border-radius:99px;padding:16px 30px;font-size:13px;font-weight:600;
@@ -276,7 +289,7 @@ body.knob #prog{opacity:0}
 </div>
 
 <script type="module">
-import { db, fs, auth, onUser, getSettings, loadCatalog, loadKombinImage, localProfile, saveLocalProfile, addToCart, updateCartBadge, toast as toastMsg, WORLDS, WORLD_FABRIC, sizeIndex } from '/js/app.js';
+import { db, fs, auth, onUser, getSettings, loadCatalog, loadKombinImage, localProfile, saveLocalProfile, addToCart, updateCartBadge, pairingText, WORLDS, WORLD_FABRIC, sizeIndex } from '/js/app.js';
 import { dailyPicks } from '/js/reco.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v)), lerp=(a,b,t)=>a+(b-a)*t;
@@ -286,10 +299,12 @@ const GOLD='#c9a45c';
 
 /* ---------- veri: yayındaki kombinler veritabanından ---------- */
 let K=[];
+const toPc=p=>({k:p.id,n:p.name,f:+p.price||0,s:p.sizes?.length?p.sizes:['Tek beden'],imgs:p.images||[]});
 const catalogP=Promise.all([loadCatalog(),getSettings()]).then(([{products,kombins},st])=>{
   K=kombins.map(k=>({id:k.id,g:k.gender,world:WORLDS[k.world]||'',fab:WORLD_FABRIC[k.world]||'pamuk',name:k.name,occ:k.occ||'',d:k.desc||'',
     styles:k.styles||[],productIds:k.productIds,_raw:k,
-    p:k.productIds.map(id=>products[id]).filter(Boolean).map(p=>({k:p.id,n:p.name,f:+p.price||0,s:p.sizes?.length?p.sizes:['Tek beden'],imgs:p.images||[]}))}));
+    p:k.productIds.map(id=>products[id]).filter(Boolean).map(toPc),
+    x:(k.extraIds||[]).map(id=>products[id]).filter(Boolean).map(toPc)}));
   return {products,settings:st};
 }).catch(e=>{console.error(e);return {products:{},settings:{dailyCount:9}};});
 const saved=localProfile();
@@ -469,10 +484,17 @@ function renderDP(k){
    <div class="pcs">${k.p.map((x,i)=>{ if(!picked[x.k])picked[x.k]=x.s[Math.min(si,x.s.length-1)];
      return `<button class="pc" data-k="${x.k}" style="--i:${i};--r:${[-3,2.5,-2,3][i%4]}deg;--fx:${mobile?0:-40}vw;--fy:${mobile?-30:0}vh">
        <span class="ph"><img src="${x.imgs[0]||''}" alt="${x.n}" draggable="false"></span><span>${x.n}</span><em>${tl(x.f)} · <u data-sz="${x.k}">${picked[x.k]}</u></em></button>`}).join('')}</div>
+   ${k.x.length?`<div class="pair"><p>${pairingText(k.x.map(x=>({name:x.n})))}</p>
+     <div class="xs">${k.x.map(x=>{ if(!picked[x.k])picked[x.k]=x.s[Math.min(si,x.s.length-1)];
+       return `<label class="xi"><img src="${x.imgs[0]||''}" alt="" data-xk="${x.k}"><span><b>${x.n}</b><em>+${tl(x.f)}</em></span><input type="checkbox" data-x="${x.k}"><i></i></label>`}).join('')}</div>
+     <small>Kombin fiyatına dahil değildir; isterseniz ekleyin.</small></div>`:''}
    <div class="seal"><i></i><span>Markalar mühürlü. Ödeme adımında, siz onaylamadan önce açıklanır.</span></div>
-   <div class="buy"><b>${tl(tot)}</b><button class="btn" id="add">Kombini sepete ekle</button></div>`;
+   <div class="buy"><b id="dtot">${tl(tot)}</b><button class="btn" id="add">Kombini sepete ekle</button></div>`;
   $$('#dp .pc').forEach(b=>b.onclick=()=>openPM(k,k.p.find(x=>x.k===b.dataset.k)));
-  $('#add').onclick=e=>{ const sizes={}; k.p.forEach(x=>sizes[x.k]=picked[x.k]); addToCart(k.id,sizes);
+  $$('#dp [data-xk]').forEach(im=>im.onclick=e=>{e.preventDefault();openPM(k,k.x.find(x=>x.k===im.dataset.xk));});
+  const chosen=()=>$$('#dp [data-x]').filter(c=>c.checked).map(c=>c.dataset.x);
+  $$('#dp [data-x]').forEach(c=>c.onchange=()=>{ $('#dtot').textContent=tl(tot+chosen().reduce((s,id)=>s+k.x.find(x=>x.k===id).f,0)); });
+  $('#add').onclick=e=>{ const sizes={}; [...k.p,...k.x].forEach(x=>sizes[x.k]=picked[x.k]); addToCart(k.id,sizes,chosen());
     e.target.outerHTML='<a class="btn ok" href="/sepet">Sepete eklendi · Sepete git →</a>'; };
 }
 
