@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iyigiy · Tüm kombinler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/ui.css">
+<style>
+.lay{display:grid;grid-template-columns:240px 1fr;gap:30px;align-items:start}
+.filters{position:sticky;top:90px;display:grid;gap:22px}
+.filters .chips{gap:6px}.filters .chip{padding:7px 13px;font-size:12.5px}
+@media (max-width:860px){.lay{grid-template-columns:1fr}.filters{position:static}}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<main class="wrap">
+  <div class="between"><div><div class="lab">Katalog</div><h1 style="margin-top:8px">Tüm kombinler</h1></div>
+    <select class="in" id="sort" style="max-width:220px"><option value="rec">Size önerilen</option><option value="new">En yeni</option><option value="asc">Fiyat: artan</option><option value="desc">Fiyat: azalan</option></select></div>
+  <div class="lay" style="margin-top:28px">
+    <aside class="filters">
+      <div><div class="lab" style="margin-bottom:10px">Kimin için</div><div class="chips" id="fg"><button class="chip" data-v="kadin">Kadın</button><button class="chip" data-v="erkek">Erkek</button></div></div>
+      <div><div class="lab" style="margin-bottom:10px">Marka dünyası</div><div class="chips" id="fw"><button class="chip" data-v="kesif">Keşif</button><button class="chip" data-v="tanidik">Tanıdık</button><button class="chip" data-v="imza">İmza</button></div></div>
+      <div><div class="lab" style="margin-bottom:10px">Kullanım</div><div class="chips" id="fo"></div></div>
+      <div><div class="lab" style="margin-bottom:10px">En fazla <span id="bv"></span></div><input type="range" id="fb" min="1000" max="30000" step="500" value="30000" style="width:100%;accent-color:var(--gold)"></div>
+      <button class="link" id="clr" style="text-align:left;font-size:13px">Filtreleri temizle</button>
+    </aside>
+    <section><p class="muted" id="cnt" style="font-size:13px;margin-bottom:14px"></p><div class="grid g3" id="list"><div class="spin"></div></div></section>
+  </div>
+</main>
+<script type="module" src="/js/kombinler.js"></script>
+</body>
+</html>

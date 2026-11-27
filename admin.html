@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iyigiy · Yönetim</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/ui.css">
+<style>
+.side{display:grid;grid-template-columns:220px 1fr;gap:28px}
+.side nav{display:flex;flex-direction:column;gap:2px;position:sticky;top:90px;align-self:start}
+.side nav button{text-align:left;padding:11px 14px;border-radius:10px;font-size:14px;color:var(--soft)}
+.side nav button.on{background:var(--bg2);color:var(--paper);box-shadow:inset 2px 0 0 var(--gold)}
+.side nav button .n{float:right;font-size:11px;background:var(--gold);color:#14110c;border-radius:9px;padding:1px 7px}
+@media (max-width:860px){.side{grid-template-columns:1fr}.side nav{flex-direction:row;flex-wrap:wrap;position:static}}
+.thumbs{display:flex;gap:6px}
+.thumbs img{width:44px;height:58px;object-fit:cover;border-radius:6px;background:#222}
+.kprop{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:start}
+.kprop .im{aspect-ratio:9/16;border-radius:10px;background:#1c1a17 center/cover no-repeat;display:grid;place-items:center;color:var(--mute);font-size:12px;text-align:center;overflow:hidden}
+.kprop .im img{width:100%;height:100%;object-fit:cover}
+.pieces{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.pieces .pc{width:74px;font-size:11px;color:var(--soft);line-height:1.3}
+.pieces .pc img{width:74px;height:96px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px;background:#222}
+.rates td input{width:90px}
+.imgup{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.imgup .t{position:relative}
+.imgup .t img{width:70px;height:92px;object-fit:cover;border-radius:6px}
+.imgup .t button{position:absolute;right:-6px;top:-6px;width:22px;height:22px;border-radius:50%;background:var(--bad);color:#fff;font-size:12px}
+.locked{max-width:520px;margin:12vh auto;text-align:center}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<main class="wrap" id="root"><div class="spin"></div></main>
+<div class="modal" id="modal"><div class="box"><button class="x" onclick="document.getElementById('modal').classList.remove('on')">✕</button><div id="mbody"></div></div></div>
+<script type="module" src="/js/admin.js"></script>
+</body>
+</html>

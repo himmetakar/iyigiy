@@ -13,6 +13,7 @@ while ($listener.IsListening) {
     $rel = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath).TrimStart('/')
     if ($rel -eq '') { $rel = 'index.html' }
     $path = [IO.Path]::GetFullPath((Join-Path $root $rel))
+    if (-not (Test-Path $path -PathType Leaf) -and (Test-Path ($path + '.html') -PathType Leaf)) { $path = $path + '.html' }
     if ($path.StartsWith($root) -and (Test-Path $path -PathType Leaf)) {
       $bytes = [IO.File]::ReadAllBytes($path)
       $ext = [IO.Path]::GetExtension($path).ToLower()

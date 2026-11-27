@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iyigiy · Hesabım</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/ui.css">
+<style>
+.auth{max-width:440px;margin:6vh auto}
+.ord{margin-bottom:16px}
+.ord .items{display:grid;gap:8px;margin-top:14px}
+.ord .it{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:10px 0;border-top:1px solid var(--line2)}
+.retopt{display:grid;gap:10px;margin:16px 0}
+.retopt label{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line2);border-radius:12px;padding:14px;cursor:pointer}
+.retopt label:has(input:checked){border-color:var(--gold);background:rgba(201,164,92,.06)}
+.retopt input{accent-color:var(--gold);margin-top:3px}
+.pick{display:grid;gap:8px;margin-top:10px}
+.pick .r{display:grid;grid-template-columns:24px 1fr 120px;gap:10px;align-items:center;font-size:13.5px}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<main class="wrap" id="root"><div class="spin"></div></main>
+<div class="modal" id="modal"><div class="box"><button class="x" onclick="document.getElementById('modal').classList.remove('on')">✕</button><div id="mbody"></div></div></div>
+<script type="module" src="/js/hesap.js"></script>
+</body>
+</html>
