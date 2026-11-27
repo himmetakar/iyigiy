@@ -23,7 +23,10 @@ export async function saveBodyPhoto(uid, file) {
 export const deleteBodyPhoto = uid => deleteDoc(doc(db, 'bodyPhotos', uid));
 
 // Kombin için giydirme talebi açar (talep kimliği = kombin kimliği).
+// Önceki (ör. reddedilmiş) talep varsa silinip yenisi açılır; kurallar talebi güncellemeyi yalnızca admine verir.
 export async function requestTryon(uid, k) {
+  const ref = doc(db, 'tryons', k.id), old = await getDoc(ref).catch(() => null);
+  if (old?.exists()) await deleteDoc(ref);
   await setDoc(doc(db, 'tryons', k.id), { uid, kombinId: k.id, kombinName: k.name || '', status: 'bekliyor', createdAt: serverTimestamp() });
   await updateDoc(doc(db, 'kombins', k.id), { tryon: 'bekliyor', updatedAt: serverTimestamp() });
 }
