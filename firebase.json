@@ -1,4 +1,7 @@
 {
+  "functions": [
+    { "source": "functions", "codebase": "default", "ignore": ["node_modules", ".git", "*.log"] }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
@@ -16,6 +19,7 @@
       "**/.*/**",
       "**/node_modules/**",
       "tools/**",
+      "functions/**",
       "docs/**",
       "assets/gen/**",
       ".claude/**"

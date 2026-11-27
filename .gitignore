@@ -13,3 +13,6 @@ firebase-debug.log
 
 # Yerel önizleme ayarları
 .claude/settings.local.json
+
+# Cloud Functions bağımlılıkları
+functions/node_modules/

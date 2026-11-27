@@ -4,7 +4,7 @@ import {
   tl, pct, esc, fmtDate, toDate, toast, $, $$, round2, ROLES, compressImage, uid8
 } from './app.js';
 const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp } = fs;
-import { getBodyPhoto, deleteBodyPhoto, requestTryon, photoForm } from './bodyphoto.js';
+import { getBodyPhoto, deleteBodyPhoto, requestTryon, photoForm, tryonPanel } from './bodyphoto.js';
 mountNav('');
 const root = $('#root');
 let U, S, INF, RANGE = 30;
@@ -168,7 +168,9 @@ function bindCopy(scope) {
 
 /* ================= kişisel mağaza ================= */
 const KST = { magaza: ['Gardırobunuzda', 'gold'], yayinda: ['Gardırobunuzda ve ana katalogda', 'ok'], arsiv: ['Arşivde', ''] };
+let TP_OFF = [];
 async function myWardrobe(v, products) {
+  TP_OFF.forEach(f => f()); TP_OFF = [];
   v.innerHTML = '<div class="spin"></div>';
   const ks = await getDocs(query(collection(db, 'kombins'), where('ownerUid', '==', U.uid)));
   const list = ks.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -179,23 +181,27 @@ async function myWardrobe(v, products) {
   for (const k of list) {
     const st = KST[k.status] || ['Taslak', ''];
     const cat = { bekliyor: '<span class="badge warn">Katalog onayı bekliyor</span>', red: '<span class="badge bad">Katalog için uygun bulunmadı</span>' }[k.catalog] || '';
-    const tr = { bekliyor: '<span class="badge warn">Giydirme hazırlanıyor</span>', hazir: '<span class="badge gold">Sizin fotoğrafınızla</span>' }[k.tryon] || '';
+    const tr = { bekliyor: '<span class="badge warn">Giydirme hazırlanıyor</span>', onay: '<span class="badge gold">Giydirme onayınızda</span>',
+      hata: '<span class="badge bad">Giydirme üretilemedi</span>', hazir: '<span class="badge gold">Sizin fotoğrafınızla</span>' }[k.tryon] || '';
     const el = document.createElement('div'); el.className = 'kcard';
     el.innerHTML = `<div class="ph" data-ph><span class="w">${WORLDS[k.world] || ''}</span></div><div class="meta">
       <div class="row" style="gap:6px">${`<span class="badge ${st[1]}">${st[0]}</span>`}${cat}${tr}</div>
       <b>${esc(k.name)}</b><div class="p">${tl(kombinTotal(k, products))}${(k.extraIds || []).length ? ` <span class="muted" style="font-size:12px">· +${k.extraIds.length} eşlik eden</span>` : ''}</div>
       <div class="row" style="margin-top:12px;gap:8px">
         <a class="btn sm ghost" href="/studyo?id=${k.id}">Düzenle</a>
-        ${k.status !== 'arsiv' && (!k.tryon || k.tryon === 'yok') ? '<button class="btn sm ghost" data-a="try">Üzerimde gör</button>' : ''}
+        ${k.status !== 'arsiv' && (!k.tryon || ['yok', 'hazir'].includes(k.tryon)) ? `<button class="btn sm ghost" data-a="try">${k.tryon === 'hazir' ? 'Yeniden giydir' : 'Üzerimde gör'}</button>` : ''}
         ${k.status === 'arsiv' ? '<button class="btn sm ghost" data-a="back">Gardıroba as</button>' : '<button class="btn sm ghost" data-a="arc">Arşivle</button>'}
-        ${k.status !== 'yayinda' ? '<button class="btn sm danger" data-a="del">Sil</button>' : ''}</div></div>`;
+        ${k.status !== 'yayinda' ? '<button class="btn sm danger" data-a="del">Sil</button>' : ''}</div><div data-tp></div></div>`;
+    // Giydirme sürüyorsa ya da onay bekliyorsa canlı durum ve "yayınla" burada görünür.
+    if (['bekliyor', 'onay', 'hata'].includes(k.tryon))
+      TP_OFF.push(tryonPanel(el.querySelector('[data-tp]'), k.id, st => { if (st === 'tamam' || st === 'yok') setTimeout(() => myWardrobe(v, products), 600); }));
     loadKombinImage(k).then(s => { if (s) el.querySelector('[data-ph]').style.backgroundImage = `url("${s}")`; });
     el.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
       const a = b.dataset.a; b.disabled = true;
       try {
         if (a === 'try') {
           if (!await getBodyPhoto(U.uid)) { toast('Önce boydan fotoğrafınızı yükleyin'); return $('[data-t="foto"]').click(); }
-          await requestTryon(U.uid, k); toast('Giydirme talebi alındı');
+          await requestTryon(U.uid, k); toast('Görseliniz hazırlanıyor');
         }
         if (a === 'arc') {
           if (!confirm('Kombin gardırobunuzdan (ve katalogdan) kaldırılıp arşivlensin mi?')) { b.disabled = false; return; }

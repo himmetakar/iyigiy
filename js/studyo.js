@@ -1,11 +1,11 @@
 // Kombin stüdyosu: onaylı influencer/stilist mankenin üzerinde kombin hazırlar ve kendi gardırobuna asar.
-// Akış: parçalar (üst, alt, dış giyim, elbise, ayakkabı) → aksesuar eklensin mi? → çanta eklensin mi? → ad ve kaydet → giydirme.
+// Akış: parçalar (üst, alt, dış giyim, elbise) → aksesuar eklensin mi? → çanta eklensin mi? → ad ve kaydet → giydirme.
 // Aksesuar ve çanta "eşlik eden" ürünlerdir (extraIds): kombin fiyatına dahil değildir.
 import {
   db, fs, onUser, mountNav, OCCASIONS, STYLES, WORLDS, tl, esc, toast, $, $$, uid8
 } from './app.js';
 import { colorScore } from './engine.js';
-import { getBodyPhoto, requestTryon, photoForm } from './bodyphoto.js';
+import { getBodyPhoto, requestTryon, photoForm, tryonPanel } from './bodyphoto.js';
 const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, serverTimestamp } = fs;
 mountNav('');
 const root = $('#root');
@@ -17,10 +17,9 @@ const ZONES = {
   ust: { label: 'Üst gövde', sub: 'Gömlek, kazak, tişört', x: .56, y: .385, side: 'r' },
   elbise: { label: 'Boydan', sub: 'Elbise, tulum', x: .5, y: .5, side: 'r' },
   alt: { label: 'Alt gövde', sub: 'Pantolon, etek, şort', x: .55, y: .63, side: 'r' },
-  canta: { label: 'Çanta', sub: 'El, omuz, sırt çantası', x: .705, y: .555, side: 'r', extra: true },
-  ayakkabi: { label: 'Ayakkabı', sub: 'Topuklu, sneaker, bot', x: .455, y: .895, side: 'l' }
+  canta: { label: 'Çanta', sub: 'El, omuz, sırt çantası', x: .3, y: .555, side: 'l', extra: true }
 };
-const CORE = ['dis', 'ust', 'elbise', 'alt', 'ayakkabi'];
+const CORE = ['dis', 'ust', 'elbise', 'alt']; // ayakkabı satılmıyor
 const STEP_TITLES = ['Parçalar', 'Aksesuar', 'Çanta', 'Detaylar', 'Hazır'];
 
 let U, INF, P = {}, G = 'kadin', pick = {}, step = 0, EDIT = null, SAVED = null, BODY = null;
@@ -77,7 +76,7 @@ const extraIds = () => ['aksesuar', 'canta'].filter(z => pick[z]).map(z => pick[
 const coreTotal = () => CORE.reduce((s, z) => s + (+pick[z]?.price || 0), 0);
 const extraTotal = () => ['aksesuar', 'canta'].reduce((s, z) => s + (+pick[z]?.price || 0), 0);
 const valid = () => !!pick.elbise || (!!pick.ust && !!pick.alt);
-const visibleZone = z => !ZONES[z].extra || (z === 'aksesuar' ? step >= 1 : step >= 2) || pick[z];
+const visibleZone = () => true; // aksesuar ve çanta işaretleri de baştan görünür
 
 function render() {
   $$('#gt button').forEach(b => b.classList.toggle('on', b.dataset.g === G));
@@ -151,7 +150,7 @@ function drawGrid() {
   const hasCtx = Object.keys(pick).some(k => k !== DZ);
   const best = hasCtx ? list.slice().sort((a, b) => b.h - a.h).slice(0, 2).filter(x => x.h > 0).map(x => x.p.id) : [];
   $('#drg').innerHTML = list.length ? list.map(({ p }) => sugCard(p, pick[DZ]?.id === p.id, best.includes(p.id))).join('')
-    : `<div class="empty none">${poolFor(DZ).length ? 'Bu filtreye uyan ürün yok.' : 'Bu bölge için henüz ürün yok.'}</div>`;
+    : `<div class="empty none">${poolFor(DZ).length ? 'Bu filtreye uyan ürün yok.' : 'Katalogda bu bölge için henüz ürün yok. Ekibimiz ürün ekledikçe burada listelenecek.'}</div>`;
   $$('#drg .sug').forEach(b => b.onclick = () => { choose(DZ, P[b.dataset.p]); closeDrawer(); });
 }
 const sugCard = (p, on, best) => `<button class="sug ${on ? 'on' : ''}" data-p="${p.id}"><div class="im" style="background-image:url('${esc(p.images?.[0] || '')}')"></div>
@@ -174,7 +173,7 @@ function panel() {
   const pb = $('#pb');
   if (step === 0) {
     pb.innerHTML = `<div class="lab">${EDIT ? 'Kombini düzenle' : 'Kombin stüdyosu'}</div><h2>Mankeni giydirin</h2>
-      <p class="lead">Mankenin üzerindeki <b style="color:var(--gold2)">+</b> işaretlerine dokunun ve her bölge için ürün seçin. Kombin için üst ve alt parça ya da bir elbise yeterli; dış giyim ve ayakkabı ile tamamlayabilirsiniz.</p>
+      <p class="lead">Mankenin üzerindeki <b style="color:var(--gold2)">+</b> işaretlerine dokunun ve her bölge için ürün seçin. Kombin için üst ve alt parça ya da bir elbise yeterli; dış giyimle tamamlayabilirsiniz. Aksesuar ve çantayı mankenin üzerindeki işaretlerden ya da sonraki adımlarda ekleyebilirsiniz.</p>
       <div class="plist">${CORE.map(z => pick[z] ? `<div class="pitem"><img src="${esc(pick[z].images?.[0] || '')}" alt=""><div><small>${ZONES[z].label}</small>${esc(pick[z].name)}</div><span class="p">${tl(pick[z].price)}</span></div>`
         : `<div class="pitem open ${(z === 'elbise' && (pick.ust || pick.alt)) || ((z === 'ust' || z === 'alt') && pick.elbise) ? 'dis' : ''}" data-z="${z}"><span class="ph">+</span><div><small>${ZONES[z].label}</small>${ZONES[z].sub}</div></div>`).join('')}</div>
       <div class="sum">Kombin fiyatı <b style="float:right">${tl(coreTotal())}</b></div>`;
@@ -186,7 +185,7 @@ function panel() {
     if (pick[z] && !pool.some(p => p.id === pick[z].id)) pool.unshift(pick[z]);
     pb.innerHTML = `<div class="lab">Eşlik eden ürün</div><h2>${z === 'aksesuar' ? 'Aksesuar eklensin mi?' : 'Çanta eklensin mi?'}</h2>
       <p class="lead">Seçtiğiniz parçalarla renk ve tarz uyumuna göre önerdik. ${z === 'aksesuar' ? 'Aksesuar' : 'Çanta'} kombin fiyatına <b style="color:var(--paper)">dahil değildir</b>; takipçileriniz isterse kombine ekler.</p>
-      <div class="sugs">${pool.map((p, i) => sugCard(p, pick[z]?.id === p.id, i < 2 && !pick[z])).join('') || `<div class="empty" style="grid-column:1/-1">Uygun ${z === 'aksesuar' ? 'aksesuar' : 'çanta'} henüz yok.</div>`}</div>
+      <div class="sugs">${pool.map((p, i) => sugCard(p, pick[z]?.id === p.id, i < 2 && !pick[z])).join('') || `<div class="empty" style="grid-column:1/-1;padding:28px 18px;line-height:1.7">Katalogda henüz ${z === 'aksesuar' ? 'aksesuar' : 'çanta'} yok. Ürün eklendikçe burada kombininize uyanlar önerilecek; şimdilik bu adımı geçebilirsiniz.</div>`}</div>
       ${poolFor(z).length > pool.length ? `<button class="link" id="all" style="margin-top:16px;font-size:13px">Tüm ${z === 'aksesuar' ? 'aksesuarları' : 'çantaları'} gör (${poolFor(z).length})</button>` : ''}`;
     $$('#pb .sug').forEach(b => b.onclick = () => { const p = P[b.dataset.p]; if (pick[z]?.id === p.id) delete pick[z]; else pick[z] = p; render(); });
     $('#all') && ($('#all').onclick = () => openDrawer(z));
@@ -286,6 +285,8 @@ async function tryonAsk() {
 }
 async function sendTryon(el) {
   try { await requestTryon(U.uid, SAVED); SAVED.tryon = 'bekliyor';
-    el.innerHTML = `<div class="card gold"><div class="lab">Giydirme talebi alındı</div><p style="margin-top:10px;line-height:1.7;font-size:14px">Görseliniz hazırlanıyor. Ekibimiz kontrol edip yayına aldığında “${esc(SAVED.name)}” gardırobunuzda sizin fotoğrafınızla görünecek. Durumu panelinizdeki “Gardırobum” sekmesinden izleyebilirsiniz.</p></div>`;
+    el.innerHTML = `<div class="lab">Sanal deneme · ${esc(SAVED.name)}</div><div id="tpv"></div>`;
+    // Görsel sunucuda üretilir; hazır olunca burada önizleme ve "yayınla" çıkar.
+    tryonPanel($('#tpv'), SAVED.id);
   } catch (e) { console.error(e); toast('Talep gönderilemedi: ' + e.message, 'bad'); }
 }

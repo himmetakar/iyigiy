@@ -7,6 +7,7 @@ import {
 } from './app.js';
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import { tryonDecide } from './bodyphoto.js';
 import { suggestKombins, COLORS, usageMap as engineUsage, currentRound } from './engine.js';
 
 const { doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp, writeBatch, Timestamp } = fs;
@@ -55,7 +56,7 @@ async function badges() {
       getDocs(query(collection(db, 'returns'), where('status', '==', 'talep'))),
       getDocs(query(collection(db, 'influencers'), where('status', '==', 'basvuru')))]);
     set('siparisler', o.size); set('iadeler', r.size); set('influencer', i.size);
-    const t = await getDocs(query(collection(db, 'tryons'), where('status', 'in', ['bekliyor', 'onay'])));
+    const t = await getDocs(query(collection(db, 'tryons'), where('status', '==', 'hata')));
     set('studyo', t.size + CAT.kombins.filter(k => k.ownerUid && k.catalog === 'bekliyor' && k.status === 'magaza').length);
   } catch (e) { console.warn(e); }
 }
@@ -498,23 +499,22 @@ const slug = s => String(s || '').toLocaleLowerCase('tr').replace(/ı/g, 'i').re
 
 /* =============== STÜDYO TALEPLERİ =============== */
 // Influencer/stilist kombinlerinin ana katalog onayı ve "üzerimde gör" giydirme kuyruğu.
-// Giydirme, Gemini anahtarı yalnızca admin tarayıcısında olduğu için burada üretilir (Cloud Functions gelene kadar).
+// Giydirme sunucuda (Cloud Function · tryonGenerate) otomatik üretilir; kişi sonucu kendi panelinde onaylar.
+// Burada yalnızca izlenir; gerekirse admin yeniden üretir, yayınlar ya da iptal eder (tryonDecide).
 async function studyo(v) {
   await reloadCatalog();
   const [ts, ss] = await Promise.all([getDocs(collection(db, 'tryons')), getDocs(collection(db, 'stores'))]);
   const owners = {}; ss.forEach(d => owners[d.data().uid] = d.data());
   const cat = CAT.kombins.filter(k => k.ownerUid && k.catalog === 'bekliyor' && k.status === 'magaza');
-  const tr = ts.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => ['bekliyor', 'onay'].includes(t.status))
-    .sort((a, b) => (toDate(a.createdAt) || 0) - (toDate(b.createdAt) || 0));
-  const key = localStorage.getItem('iy_gemini_key');
+  const tr = ts.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => ['bekliyor', 'uretiliyor', 'onay', 'hata'].includes(t.status))
+    .sort((a, b) => (a.status === 'hata' ? -1 : 0) - (b.status === 'hata' ? -1 : 0) || (toDate(a.createdAt) || 0) - (toDate(b.createdAt) || 0));
   v.innerHTML = `<div class="lab">Influencer ve stilist kombinleri</div><h2 style="margin:8px 0 18px">Stüdyo talepleri</h2>
    <div class="card gold"><p class="muted" style="font-size:13px;line-height:1.7">Stüdyoda hazırlanan kombinler sahibinin gardırobunda hemen yayına çıkar. <b style="color:var(--paper)">Ana katalog</b> (ana sayfa gardırobu ve tüm kombinler) için buradan onaylarsın.
-     Giydirme talepleri, kişinin boydan fotoğrafı ve kombin ürünleriyle Gemini'de üretilir; sen onaylayınca kombin onun gardırobunda bu görselle yayınlanır.</p>
-     ${key ? '' : '<p style="font-size:13px;margin-top:8px;color:var(--warn)">Giydirme üretmek için Ayarlar sekmesine Gemini API anahtarını gir (yalnızca bu tarayıcıda saklanır).</p>'}</div>
-   <h3 style="margin:28px 0 14px">Giydirme talepleri <span class="badge">${tr.length}</span></h3><div id="trl" style="display:grid;gap:14px"></div>
+     Giydirme görselleri sunucuda otomatik üretilir (Gemini anahtarı Secret Manager'da); kişi sonucu kendi panelinde görüp yayınlar. Bu listede süren ve hata veren talepler görünür.</p></div>
+   <h3 style="margin:28px 0 14px">Süren giydirmeler <span class="badge">${tr.length}</span></h3><div id="trl" style="display:grid;gap:14px"></div>
    <h3 style="margin:32px 0 14px">Katalog onayı bekleyenler <span class="badge">${cat.length}</span></h3><div id="cal" style="display:grid;gap:14px"></div>`;
   const TL = $('#trl'), CL = $('#cal');
-  if (!tr.length) TL.innerHTML = '<div class="empty">Bekleyen giydirme talebi yok.</div>';
+  if (!tr.length) TL.innerHTML = '<div class="empty">Süren giydirme yok.</div>';
   for (const t of tr) TL.appendChild(tryonCard(t, owners[t.uid]));
   if (!cat.length) CL.innerHTML = '<div class="empty">Onay bekleyen kombin yok.</div>';
   for (const k of cat) CL.appendChild(ownerKombinCard(k, owners[k.ownerUid]));
@@ -544,8 +544,8 @@ function tryonCard(t, o) {
     el.querySelector('[data-del]').onclick = async () => { await deleteDoc(doc(db, 'tryons', t.id)); go('studyo'); }; return el; }
   el.innerHTML = `<div class="tryon"><div><div class="lab" style="margin-bottom:8px">Boydan fotoğraf</div><div class="im" data-bp>Yükleniyor…</div></div>
     <div><div class="lab" style="margin-bottom:8px">Sonuç</div><div class="im" data-rs>${t.resultImage ? 'Yükleniyor…' : 'Henüz üretilmedi'}</div></div><div>
-    <div class="row"><span class="badge ${t.status === 'onay' ? 'gold' : 'warn'}">${t.status === 'onay' ? 'Onayını bekliyor' : 'Üretilecek'}</span><span class="muted" style="font-size:12.5px">${ownerLine(o, k)} · ${fmtDate(t.createdAt, 1)}</span></div>
-    <h3 style="margin-top:10px">${esc(k.name)}</h3>${piecesHtml(k)}
+    <div class="row"><span class="badge ${{ onay: 'gold', hata: 'bad' }[t.status] || 'warn'}">${{ bekliyor: 'Sırada', uretiliyor: 'Üretiliyor', onay: 'Sahibinin onayında', hata: 'Hata' }[t.status]}</span>${t.attempts ? `<span class="badge">${t.attempts}. deneme</span>` : ''}<span class="muted" style="font-size:12.5px">${ownerLine(o, k)} · ${fmtDate(t.createdAt, 1)}</span></div>
+    <h3 style="margin-top:10px">${esc(k.name)}</h3>${t.error ? `<p style="color:var(--bad);font-size:13px;margin-top:6px">${esc(t.error)}</p>` : ''}${piecesHtml(k)}
     <div class="row" style="margin-top:16px" data-act></div></div></div>`;
   let photo = null;
   getDoc(doc(db, 'bodyPhotos', t.uid)).then(s => { const b = el.querySelector('[data-bp]');
@@ -553,54 +553,16 @@ function tryonCard(t, o) {
   if (t.resultImage) getDoc(doc(db, 'kombinImages', t.resultImage)).then(s => { if (s.exists()) el.querySelector('[data-rs]').innerHTML = `<img src="${s.data().data}">`; });
   const act = el.querySelector('[data-act]');
   const btn = (txt, cls, fn) => { const b = document.createElement('button'); b.className = 'btn sm ' + cls; b.textContent = txt; b.onclick = () => fn(b); act.appendChild(b); };
-  btn(t.resultImage ? 'Yeniden üret' : 'Gemini ile giydir', t.resultImage ? 'ghost' : '', async b => {
-    if (!photo) return toast('Boydan fotoğraf yok (silinmiş olabilir)', 'bad');
-    b.disabled = true; b.textContent = 'Üretiliyor… (30-60 sn)';
-    try {
-      const data = await generateTryon(photo, k);
-      const imgId = k.id + '-tryon-' + uid8();
-      await setDoc(doc(db, 'kombinImages', imgId), { data, kombinId: k.id, ownerUid: t.uid, kind: 'giydirme', model: localStorage.getItem('iy_gemini_model') || 'gemini-3-pro-image', createdAt: serverTimestamp() });
-      if (t.resultImage) deleteDoc(doc(db, 'kombinImages', t.resultImage)).catch(() => {});
-      await updateDoc(doc(db, 'tryons', t.id), { status: 'onay', resultImage: imgId, generatedAt: serverTimestamp() });
-      go('studyo'); toast('Görsel üretildi, kontrol edip onayla');
-    } catch (e) { console.error(e); toast('Üretilemedi: ' + e.message, 'bad'); b.disabled = false; b.textContent = 'Tekrar dene'; }
+  const call = (action, label, cls, done) => btn(label, cls, async b => {
+    if (action === 'cancel' && !confirm('Giydirme talebi iptal edilsin mi? Üretilen görsel silinir.')) return;
+    b.disabled = true; b.textContent = '…';
+    try { await tryonDecide(t.id, action); go('studyo'); badges(); toast(done); }
+    catch (e) { console.error(e); toast(e.message || 'İşlem yapılamadı', 'bad'); b.disabled = false; b.textContent = label; }
   });
-  if (t.resultImage) btn('Onayla ve gardırobunda yayınla', '', async () => {
-    const old = k.image?.startsWith('img:') ? k.image.slice(4) : null;
-    await updateDoc(doc(db, 'kombins', k.id), { image: 'img:' + t.resultImage, tryon: 'hazir' });
-    await updateDoc(doc(db, 'tryons', t.id), { status: 'tamam', doneAt: serverTimestamp() });
-    if (old && old !== t.resultImage) deleteDoc(doc(db, 'kombinImages', old)).catch(() => {});
-    go('studyo'); badges(); toast('Kombin, kişinin fotoğrafıyla yayında');
-  });
-  btn('Reddet', 'danger', async () => {
-    const note = prompt('Kişiye iletilecek kısa not (ör. "Fotoğraf boydan değil"):', '') ?? null; if (note === null) return;
-    if (t.resultImage) deleteDoc(doc(db, 'kombinImages', t.resultImage)).catch(() => {});
-    await updateDoc(doc(db, 'tryons', t.id), { status: 'red', note, resultImage: null });
-    await updateDoc(doc(db, 'kombins', k.id), { tryon: 'yok' });
-    go('studyo'); badges(); toast('Talep reddedildi');
-  });
+  if (['onay', 'hata'].includes(t.status)) call('retry', 'Yeniden üret', t.status === 'hata' ? '' : 'ghost', 'Yeniden üretiliyor');
+  if (t.status === 'onay') call('publish', 'Sahibi adına yayınla', 'ghost', 'Kombin, kişinin fotoğrafıyla yayında');
+  call('cancel', 'İptal et', 'danger', 'Talep iptal edildi');
   return el;
-}
-async function generateTryon(photo, k) {
-  const key = localStorage.getItem('iy_gemini_key'); if (!key) throw new Error('Ayarlar sekmesinden Gemini API anahtarını gir');
-  const ps = [...(k.productIds || []), ...(k.extraIds || [])].map(id => CAT.products[id]).filter(Boolean);
-  const me = await toBase64(photo);
-  const parts = [{ inlineData: { mimeType: me.mime, data: me.data } }], used = [];
-  for (const p of ps) { const src = p.images?.[0]; if (!src) continue;
-    try { const b = await toBase64(src); parts.push({ inlineData: { mimeType: b.mime, data: b.data } }); used.push(p); } catch (e) { console.warn('görsel alınamadı', src, e); } }
-  if (!used.length) throw new Error('Ürün görselleri okunamadı');
-  const list = used.map((p, i) => `image ${i + 2}: the ${p.name} (${(p.colors || []).join('/')})`).join('; ');
-  parts.push({ text: `Image 1 is a photo of a real person. Images 2 to ${used.length + 1} are product photos of clothing and accessories. Create one new photorealistic full-length fashion photograph of THE SAME PERSON from image 1: keep their face, facial features, hair, skin tone, body shape and proportions exactly as they are, so they are clearly recognisable as the same individual. They now wear, as one complete outfit, exactly these items reproduced faithfully in colour, cut, fabric and details: ${list}. If a bag is given they carry it naturally; if no shoes are given, add simple shoes that suit the outfit. Natural relaxed standing pose facing the camera, whole figure from head to toe, centred, with space above the head and below the feet. Elegant minimal studio set: deep warm charcoal backdrop, soft golden key light, subtle floor reflection, editorial luxury look, real skin and fabric texture. No text, no logos, no watermark.` });
-  const model = localStorage.getItem('iy_gemini_model') || 'gemini-3-pro-image';
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '9:16', imageSize: '1K' } } })
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error?.message || ('HTTP ' + r.status));
-  const img = j.candidates?.[0]?.content?.parts?.find(x => x.inlineData);
-  if (!img) throw new Error('Model görsel döndürmedi');
-  return compressDataUrl(`data:${img.inlineData.mimeType};base64,${img.inlineData.data}`, 900, .84);
 }
 
 /* =============== AYARLAR =============== */
