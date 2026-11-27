@@ -110,6 +110,8 @@ export const $$ = s => [...document.querySelectorAll(s)];
 export const uid8 = () => Math.random().toString(36).slice(2, 10);
 
 export function toast(msg, kind = '') {
+  // Demo hesapta kurallar yazmayı reddeder; teknik hata yerine anlaşılır bir not göster.
+  if (_demoActive && /insufficient permissions|permission-denied/i.test(String(msg))) { msg = 'Demo hesapta değişiklikler kaydedilmez'; kind = ''; }
   let t = document.getElementById('toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
   t.textContent = msg; t.className = 'show ' + kind;
@@ -263,10 +265,79 @@ export function mountNav(active = '') {
       <a href="/sepet" class="cart ${active === 'cart' ? 'on' : ''}">Sepet <b data-cart-count></b></a>
     </nav>`;
   updateCartBadge();
-  onUser(u => {
+  onUser(async u => {
     const a = document.getElementById('navAcc'); if (!a) return;
-    if (isAdminUser(u)) { if (!document.getElementById('navAdm')) a.insertAdjacentHTML('afterend', '<a href="/admin" id="navAdm">Admin</a>'); }
+    const adm = isAdminUser(u) || (u && demoRole(u, await getSettings()) === 'admin');
+    if (adm && !document.getElementById('navAdm')) a.insertAdjacentHTML('afterend', '<a href="/admin" id="navAdm">Admin</a>');
+  });
+}
+
+/* ---------------- demo hesaplar ----------------
+   Ana sayfadaki "Demo" menüsünden tek tıkla girilir. Şifre bilerek herkese açıktır.
+   Demo yönetici kurallar gereği yalnızca okur; influencer ve müşteri kendi verileriyle sınırlıdır.
+   Hesaplar admin panelindeki Araçlar > "Demo hesaplarını kur" ile oluşturulur; menü oradan kapatılır. */
+export const DEMO_PASSWORD = 'iyigiy-demo-2026';
+export const DEMO_ACCOUNTS = {
+  admin: { email: 'demo-yonetici@iyigiy.com', name: 'Demo Yönetici', label: 'Yönetici', note: 'salt okunur', next: '/admin' },
+  influencer: { email: 'demo-influencer@iyigiy.com', name: 'Deniz Demo', label: 'Influencer', note: 'panel ve kişisel mağaza', next: '/influencer' },
+  musteri: { email: 'demo-musteri@iyigiy.com', name: 'Ece Demo', label: 'Müşteri', note: 'sipariş ve iade', next: '/hesap' }
+};
+// Kullanıcı bir demo hesabıysa rolünü döndürür ('admin' | 'influencer' | 'musteri'), değilse null.
+export function demoRole(u, s) {
+  const d = s?.demo || {};
+  if (!u || !d.enabled) return null;
+  return Object.keys(DEMO_ACCOUNTS).find(r => d[r + 'Uid'] && d[r + 'Uid'] === u.uid) || null;
+}
+let _demoActive = false;
+async function mountDemoMenu() {
+  const s = await getSettings();
+  // Yerel önizlemede (localhost) kurulmamış olsa da görünür, sitede yalnızca admin açınca.
+  if (!s.demo?.enabled && !['localhost', '127.0.0.1'].includes(location.hostname)) return;
+  const host = document.querySelector('#nav .links') || document.querySelector('#top .tl');
+  if (!host || host.querySelector('.demo-m')) return;
+  if (!document.getElementById('demoCss')) document.head.insertAdjacentHTML('beforeend', `<style id="demoCss">
+    .demo-m{position:relative;display:inline-flex;align-items:center}
+    .demo-m>button{all:unset;cursor:pointer;font:inherit;letter-spacing:inherit;color:var(--gold2,#e8d09a);border:1px solid var(--line,rgba(201,164,92,.35));border-radius:20px;padding:4px 12px}
+    .demo-m>button:hover{border-color:var(--gold,#c9a45c)}
+    .demo-p{display:none;position:absolute;right:0;top:calc(100% + 10px);z-index:100;min-width:230px;padding:8px;border-radius:12px;
+      background:#17130e;border:1px solid var(--line,rgba(201,164,92,.35));box-shadow:0 18px 40px rgba(0,0,0,.5);text-align:left}
+    .demo-m.open .demo-p{display:block}
+    .demo-p .h{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold,#c9a45c);padding:8px 10px 6px}
+    .demo-p button{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;padding:9px 10px;border-radius:8px;color:var(--paper,#f2ece1);font-size:13px;letter-spacing:0}
+    .demo-p button:hover{background:rgba(201,164,92,.12)}
+    .demo-p button span{display:block;font-size:11.5px;color:var(--mute,#9a917f);margin-top:2px}
+    .demo-p [hidden]{display:none!important}
+    .demo-p strong{font-weight:600}
+    .demo-p button.on strong::after{content:' ✓';color:var(--gold2,#e8d09a)}
+    .demo-p .out{border-top:1px solid rgba(242,236,225,.08);margin-top:6px;border-radius:0 0 8px 8px;color:var(--mute,#9a917f)}</style>`);
+  const el = document.createElement('div'); el.className = 'demo-m';
+  el.innerHTML = `<button type="button" aria-haspopup="true">Demo</button><div class="demo-p" role="menu"><div class="h">Demo hesapla gez</div>
+    ${Object.entries(DEMO_ACCOUNTS).map(([r, a]) => `<button type="button" role="menuitem" data-demo="${r}"><strong>${a.label}</strong><span>${a.note}</span></button>`).join('')}
+    <button type="button" class="out" data-demo-out hidden>Demo hesaptan çık</button></div>`;
+  host.appendChild(el);
+  const btn = el.firstElementChild;
+  btn.onclick = e => { e.stopPropagation(); el.classList.toggle('open'); };
+  document.addEventListener('click', e => { if (!el.contains(e.target)) el.classList.remove('open'); });
+  el.querySelectorAll('[data-demo]').forEach(b => b.onclick = async () => {
+    const acc = DEMO_ACCOUNTS[b.dataset.demo];
+    b.querySelector('span').textContent = 'Giriş yapılıyor…';
+    try {
+      if (auth.currentUser) await signOut(auth);
+      await signInWithEmailAndPassword(auth, acc.email, DEMO_PASSWORD);
+      location.href = acc.next;
+    } catch (e) {
+      console.error(e); b.querySelector('span').textContent = acc.note;
+      toast(e.code === 'auth/invalid-credential' ? 'Demo hesap henüz kurulmamış' : 'Demo girişi yapılamadı: ' + e.message, 'bad');
+    }
+  });
+  el.querySelector('[data-demo-out]').onclick = () => signOut(auth).then(() => location.href = '/');
+  onUser(u => {
+    const r = demoRole(u, s); _demoActive = !!r;
+    btn.textContent = r ? 'Demo · ' + DEMO_ACCOUNTS[r].label : 'Demo';
+    el.querySelectorAll('[data-demo]').forEach(b => b.classList.toggle('on', b.dataset.demo === r));
+    el.querySelector('[data-demo-out]').hidden = !r;
   });
 }
 
 captureRef();
+mountDemoMenu().catch(e => console.warn('demo menü', e));

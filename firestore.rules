@@ -1,6 +1,7 @@
 rules_version = '2';
 // iyigiy güvenlik kuralları
 // Admin: aşağıdaki listedeki doğrulanmış Google hesapları.
+// Demo yönetici: settings/main.demo.adminUid. Yönetim verisini OKUR, hiçbir şey yazamaz.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -11,13 +12,21 @@ service cloud.firestore {
         && request.auth.token.email in ['himmet.akarr@gmail.com', 'himmettakarr@gmail.com'];
     }
     function me() { return request.auth.uid; }
+    function settingsDoc() { return get(/databases/$(database)/documents/settings/main).data; }
+    // Salt okunur demo yönetici (ana sayfadaki Demo menüsünden girilir)
+    function isDemoAdmin() {
+      return signedIn() && settingsDoc().get('demo', {}).get('enabled', false) == true
+        && settingsDoc().get('demo', {}).get('adminUid', '') == me();
+    }
+    // Yönetim verisini görebilenler: admin ve demo yönetici
+    function canAudit() { return isAdmin() || isDemoAdmin(); }
     // Onaylı (aktif) influencer ya da stilist
     function activePartner() {
       return signedIn() && get(/databases/$(database)/documents/influencers/$(request.auth.uid)).data.status == 'aktif';
     }
     function unchanged(keys) { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(keys); }
 
-    // Genel ayarlar: komisyon oranları, iade ücreti vb.
+    // Genel ayarlar: komisyon oranları, iade ücreti, demo hesaplar vb.
     match /settings/{id} {
       allow read: if true;
       allow write: if isAdmin();
@@ -32,7 +41,7 @@ service cloud.firestore {
     // Onaylı influencer/stilist kendi kombinini stüdyoda oluşturur; ana kataloğa ('yayinda') yalnızca admin alır.
     match /kombins/{id} {
       allow read: if resource.data.status in ['yayinda', 'magaza']
-                  || isAdmin()
+                  || canAudit()
                   || (signedIn() && resource.data.ownerUid == me());
       allow create: if isAdmin()
                     || (activePartner() && request.resource.data.ownerUid == me()
@@ -65,6 +74,7 @@ service cloud.firestore {
     }
 
     // Giydirme için boydan fotoğraf (KVKK: açık rıza ile, yalnızca sahibi ve admin görür, sahibi her an siler).
+    // Demo yönetici bu fotoğrafları GÖREMEZ.
     match /bodyPhotos/{uid} {
       allow read: if (signedIn() && me() == uid) || isAdmin();
       allow create, update: if signedIn() && me() == uid
@@ -75,32 +85,39 @@ service cloud.firestore {
 
     // Giydirme talepleri: influencer oluşturur, admin Gemini ile üretip sonuçlandırır.
     match /tryons/{id} {
-      allow read: if (signedIn() && resource.data.uid == me()) || isAdmin();
+      allow read: if (signedIn() && resource.data.uid == me()) || canAudit();
       allow create: if activePartner() && request.resource.data.uid == me() && request.resource.data.status == 'bekliyor';
       allow delete: if (signedIn() && resource.data.uid == me()) || isAdmin();
-      allow update: if isAdmin()
-                    || (activePartner() && resource.data.uid == me() && request.resource.data.uid == me()
-                        && request.resource.data.status == 'bekliyor');
+      allow update: if isAdmin();
     }
 
-    // Kullanıcı profili
+    // Kullanıcı profili (demo yönetici göremez)
     match /users/{uid} {
       allow read: if (signedIn() && me() == uid) || isAdmin();
-      allow create, update: if signedIn() && me() == uid;
+      allow create, update: if (signedIn() && me() == uid) || isAdmin();
       allow delete: if isAdmin();
     }
 
     // Siparişler: müşteri oluşturur, durumunu yalnızca admin değiştirir.
+    // Not: fiyatlar şimdilik tarayıcıdan gelir; admin panelindeki siparişler sekmesi her kalemi
+    // güncel ürün fiyatıyla karşılaştırıp uyuşmazlığı işaretler. Ödeme bağlanınca sipariş sunucuda oluşturulmalı.
     match /orders/{id} {
-      allow read: if (signedIn() && resource.data.uid == me()) || isAdmin();
+      allow read: if (signedIn() && resource.data.uid == me()) || canAudit();
       allow create: if signedIn() && request.resource.data.uid == me()
-                    && request.resource.data.status == 'alindi';
+                    && request.resource.data.status == 'alindi'
+                    && request.resource.data.payment == 'test'
+                    && request.resource.data.total is number && request.resource.data.total > 0
+                    && request.resource.data.items is list
+                    && request.resource.data.items.size() > 0 && request.resource.data.items.size() <= 20
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.keys().hasOnly(['uid', 'email', 'items', 'total', 'address', 'status', 'payment',
+                         'history', 'createdAt', 'refCode', 'refKombinId']);
       allow update, delete: if isAdmin();
     }
 
     // İade ve değişim talepleri
     match /returns/{id} {
-      allow read: if (signedIn() && resource.data.uid == me()) || isAdmin();
+      allow read: if (signedIn() && resource.data.uid == me()) || canAudit();
       allow create: if signedIn() && request.resource.data.uid == me()
                     && request.resource.data.status == 'talep';
       allow update, delete: if isAdmin();
@@ -108,8 +125,8 @@ service cloud.firestore {
 
     // Influencer başvurusu ve profili
     match /influencers/{uid} {
-      allow read: if (signedIn() && me() == uid) || isAdmin();
-      allow create: if signedIn() && me() == uid && request.resource.data.status == 'basvuru';
+      allow read: if (signedIn() && me() == uid) || canAudit();
+      allow create: if (signedIn() && me() == uid && request.resource.data.status == 'basvuru') || isAdmin();
       allow update: if isAdmin()
                     || (signedIn() && me() == uid && unchanged(['status', 'code', 'customRates', 'role', 'slug']));
       allow delete: if isAdmin();
@@ -122,26 +139,36 @@ service cloud.firestore {
     }
 
     // Link tıklamaları: ziyaretçi yazar, sadece ilgili influencer ve admin okur.
+    // Zaman damgası sunucu saati olmak zorunda (geçmişe tıklama yazılamaz).
     match /clicks/{id} {
-      allow create: if exists(/databases/$(database)/documents/refCodes/$(request.resource.data.code))
-                    && get(/databases/$(database)/documents/refCodes/$(request.resource.data.code)).data.uid == request.resource.data.infUid
-                    && request.resource.data.keys().hasOnly(['code', 'infUid', 'vid', 'kombinId', 'at']);
-      allow read: if (signedIn() && resource.data.infUid == me()) || isAdmin();
+      allow create: if isAdmin()
+                    || (exists(/databases/$(database)/documents/refCodes/$(request.resource.data.code))
+                        && get(/databases/$(database)/documents/refCodes/$(request.resource.data.code)).data.uid == request.resource.data.infUid
+                        && request.resource.data.keys().hasOnly(['code', 'infUid', 'vid', 'kombinId', 'at'])
+                        && request.resource.data.at == request.time
+                        && request.resource.data.vid is string && request.resource.data.vid.size() <= 40);
+      allow read: if (signedIn() && resource.data.infUid == me()) || canAudit();
       allow update, delete: if isAdmin();
     }
 
-    // Referanslı satışlar: alıcı oluşturur, influencer görür, admin onaylar.
+    // Referanslı satışlar: alıcı kendi siparişi için oluşturur, influencer görür, admin onaylar.
+    // Kayıt, aynı numaralı ve aynı referans kodlu bir sipariş varsa açılabilir; komisyon tutara göre sınırlıdır.
     match /refSales/{id} {
-      allow create: if signedIn() && request.resource.data.uid == me()
-                    && request.resource.data.status == 'beklemede'
-                    && get(/databases/$(database)/documents/refCodes/$(request.resource.data.code)).data.uid == request.resource.data.infUid;
-      allow read: if (signedIn() && resource.data.infUid == me()) || isAdmin();
+      allow create: if isAdmin()
+                    || (signedIn() && request.resource.data.uid == me()
+                        && request.resource.data.status == 'beklemede'
+                        && get(/databases/$(database)/documents/refCodes/$(request.resource.data.code)).data.uid == request.resource.data.infUid
+                        && get(/databases/$(database)/documents/orders/$(id)).data.uid == me()
+                        && get(/databases/$(database)/documents/orders/$(id)).data.refCode == request.resource.data.code
+                        && request.resource.data.commission is number
+                        && request.resource.data.commission <= get(/databases/$(database)/documents/orders/$(id)).data.total * 0.3);
+      allow read: if (signedIn() && resource.data.infUid == me()) || canAudit();
       allow update, delete: if isAdmin();
     }
 
     // Influencer ödemeleri
     match /payouts/{id} {
-      allow read: if (signedIn() && resource.data.infUid == me()) || isAdmin();
+      allow read: if (signedIn() && resource.data.infUid == me()) || canAudit();
       allow write: if isAdmin();
     }
   }

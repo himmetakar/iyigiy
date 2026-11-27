@@ -2,17 +2,20 @@
 import {
   db, fs, onUser, isAdminUser, googleSignIn, logout, mountNav, getSettings, resetSettingsCache, DEFAULT_SETTINGS,
   WORLDS, CATEGORIES, TYPES, STYLES, OCCASIONS, STATUS, RET_STATUS, tl, pct, esc, fmtDate, toDate, toast, $, $$,
-  loadCatalog, loadKombinImage, kombinTotal, commissionLines, round2, uid8, ROLES, slugify, validSlug
+  loadCatalog, loadKombinImage, kombinTotal, commissionLines, round2, uid8, ROLES, slugify, validSlug,
+  firebaseConfig, demoRole, DEMO_ACCOUNTS, DEMO_PASSWORD
 } from './app.js';
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
 import { suggestKombins, COLORS, usageMap as engineUsage, currentRound } from './engine.js';
 
-const { doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp, writeBatch } = fs;
+const { doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp, writeBatch, Timestamp } = fs;
 mountNav('admin');
 const root = $('#root');
 const modal = (html) => { $('#mbody').innerHTML = html; $('#modal').classList.add('on'); };
 const closeModal = () => $('#modal').classList.remove('on');
 
-let S, CAT = { products: {}, kombins: [] }, TAB = location.hash.slice(1) || 'ozet';
+let S, CAT = { products: {}, kombins: [] }, TAB = location.hash.slice(1) || 'ozet', DEMO = false;
 
 onUser(async u => {
   if (!u) {
@@ -22,12 +25,13 @@ onUser(async u => {
     $('#g').onclick = () => googleSignIn().catch(e => toast(e.message, 'bad'));
     return;
   }
-  if (!isAdminUser(u)) {
+  S = await getSettings();
+  DEMO = !isAdminUser(u) && demoRole(u, S) === 'admin';
+  if (!isAdminUser(u) && !DEMO) {
     root.innerHTML = `<div class="locked card"><h2>Yetkiniz yok</h2><p class="muted" style="margin-top:10px">${esc(u.email)} hesabı admin değil.</p>
       <div class="sep"></div><button class="btn ghost" id="lo">Çıkış yap</button></div>`;
     $('#lo').onclick = logout; return;
   }
-  S = await getSettings();
   await reloadCatalog();
   shell();
 });
@@ -38,7 +42,7 @@ const MENU = [['ozet', 'Özet'], ['urunler', 'Ürünler'], ['oneriler', 'Kombin 
   ['iadeler', 'İade ve değişim'], ['influencer', 'Influencerlar'], ['studyo', 'Stüdyo talepleri'], ['ayarlar', 'Komisyon ve ayarlar'], ['araclar', 'Araçlar']];
 
 function shell() {
-  root.innerHTML = `<div class="side"><nav id="menu">${MENU.map(([k, l]) => `<button data-t="${k}">${l}<span class="n" data-n="${k}" style="display:none"></span></button>`).join('')}</nav><section id="view"></section></div>`;
+  root.innerHTML = (DEMO ? `<div class="card gold" style="margin-bottom:18px;padding:14px 18px;font-size:13.5px"><b>Demo yönetici</b> · Paneli gezebilirsiniz; bu hesap salt okunurdur, yaptığınız değişiklikler kaydedilmez. Müşterilerin boydan fotoğrafları ve profilleri demo hesapta gösterilmez.</div>` : '') + `<div class="side"><nav id="menu">${MENU.map(([k, l]) => `<button data-t="${k}">${l}<span class="n" data-n="${k}" style="display:none"></span></button>`).join('')}</nav><section id="view"></section></div>`;
   $$('#menu button').forEach(b => b.onclick = () => go(b.dataset.t));
   go(TAB); badges();
 }
@@ -330,7 +334,7 @@ async function siparisler(v) {
      <td><b>#${o.id.slice(0, 6).toUpperCase()}</b></td><td>${fmtDate(o.createdAt, 1)}</td>
      <td>${esc(o.address?.name || '')}<div class="muted" style="font-size:12px">${esc(o.email || '')}</div></td>
      <td style="font-size:12.5px">${(o.items || []).map(i => esc(i.name)).join('<br>')}</td><td class="num">${tl(o.total)}</td>
-     <td>${o.refCode ? `<span class="badge gold">${esc(o.refCode)}</span>` : '<span class="muted">-</span>'}</td>
+     <td>${o.refCode ? `<span class="badge gold">${esc(o.refCode)}</span>` : '<span class="muted">-</span>'}${priceCheck(o).length ? '<br><span class="badge bad" title="Detayda açıklama var">Fiyat uyuşmuyor</span>' : ''}</td>
      <td><select class="in" data-s="${o.id}" style="min-width:150px;padding:8px 10px">${opt(STATUS, o.status)}</select></td>
      <td><button class="btn sm ghost" data-d="${o.id}">Detay</button></td></tr>`).join('') || '<tr><td colspan="8"><div class="empty">Sipariş yok</div></td></tr>';
     $$('[data-s]').forEach(s => s.onchange = async () => { const o = list.find(x => x.id === s.dataset.s); await setOrderStatus(o, s.value); toast('Durum güncellendi: ' + STATUS[s.value]); badges(); });
@@ -343,14 +347,32 @@ async function setOrderStatus(o, st) {
   await updateDoc(doc(db, 'orders', o.id), { status: st, history: hist }); o.status = st; o.history = hist;
   await syncCommission(o);
 }
-// Komisyonu siparişin gerçek verisinden yeniden hesaplar (müşterinin yazdığı tutara güvenmez).
+// Sipariş tarayıcıda oluşturulduğu için fiyatlar değiştirilmiş olabilir.
+// Her kalemi katalogdaki güncel fiyatla, toplamı da kalemlerle karşılaştırır; sorunları listeler.
+function priceCheck(o) {
+  const bad = [];
+  (o.items || []).forEach(i => (i.products || []).forEach(p => {
+    const cur = CAT.products[p.pid];
+    if (!cur) bad.push(`${p.name}: ürün katalogda yok`);
+    else if (Math.abs((+cur.price || 0) - (+p.price || 0)) > 0.01) bad.push(`${p.name}: siparişte ${tl(p.price)}, katalogda ${tl(cur.price)}`);
+  }));
+  const sum = round2((o.items || []).reduce((s, i) => s + (i.products || []).reduce((a, p) => a + (+p.price || 0), 0), 0));
+  if (Math.abs(sum - (+o.total || 0)) > 0.01) bad.push(`Toplam tutmuyor: kalemler ${tl(sum)}, sipariş toplamı ${tl(o.total)}`);
+  return bad;
+}
+// Komisyonu siparişin gerçek verisinden yeniden hesaplar (müşterinin yazdığı tutara güvenmez):
+// her kalem için sipariş fiyatı ile katalog fiyatından düşük olanı, katalogdaki kategoriyle kullanılır.
 async function syncCommission(o) {
   if (!o.refCode) return;
   const ref = await getDoc(doc(db, 'refSales', o.id));
   const rc = await getDoc(doc(db, 'refCodes', o.refCode));
   if (!rc.exists()) return;
   const custom = rc.data().customRates || {};
-  const lines = commissionLines(o.items || [], { kombinId: o.refKombinId || null }, S, custom);
+  const safeItems = (o.items || []).map(i => ({ ...i, products: (i.products || []).map(p => {
+    const cur = CAT.products[p.pid];
+    return { ...p, price: cur ? Math.min(+cur.price || 0, +p.price || 0) : (+p.price || 0), category: cur?.category || p.category };
+  }) }));
+  const lines = commissionLines(safeItems, { kombinId: o.refKombinId || null }, S, custom);
   // tamamen iade/iptal edilen sipariş komisyon üretmez
   const status = ['iptal', 'iade'].includes(o.status) ? 'iptal' : o.status === 'teslim' ? 'onayli' : 'beklemede';
   const prev = ref.exists() ? ref.data() : {};
@@ -363,6 +385,7 @@ async function syncCommission(o) {
 }
 function orderDetail(o) {
   modal(`<div class="lab">Sipariş #${o.id.slice(0, 6).toUpperCase()}</div><h2 style="margin:8px 0 6px">${tl(o.total)}</h2><p class="muted">${fmtDate(o.createdAt, 1)} · ${STATUS[o.status]}</p>
+   ${priceCheck(o).length ? `<div class="card" style="margin-top:14px;border-color:var(--bad,#c0574f)"><b>Fiyat kontrolü</b><p class="muted" style="font-size:13px;margin-top:6px;line-height:1.7">${priceCheck(o).map(esc).join('<br>')}<br>Ürün fiyatı sipariş sonrasında değişmiş olabilir; değişmediyse sipariş tarayıcıda değiştirilmiş olabilir, hazırlamadan önce kontrol et. Komisyon her kalemde düşük olan fiyattan hesaplanır.</p></div>` : ''}
    <div class="sep"></div>${(o.items || []).map(i => `<div style="margin-bottom:16px"><b class="serif" style="font-size:18px">${esc(i.name)}</b>
      <table class="tbl" style="margin-top:8px"><tr><th>Parça</th><th>Marka</th><th>Beden</th><th class="num">Fiyat</th><th>Kaynak</th></tr>
      ${i.products.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.brand)}</td><td><b>${esc(p.size)}</b></td><td class="num">${tl(p.price)}</td><td>${CAT.products[p.pid]?.sourceUrl ? `<a class="link" href="${esc(CAT.products[p.pid].sourceUrl)}" target="_blank">Aç</a>` : '-'}</td></tr>`).join('')}</table></div>`).join('')}
@@ -623,8 +646,82 @@ async function ayarlar(v) {
 async function araclar(v) {
   v.innerHTML = `<div class="lab">Kurulum</div><h2 style="margin:8px 0 18px">Araçlar</h2>
    <div class="card"><b>Örnek verileri yükle</b><p class="muted" style="margin:8px 0 14px;font-size:13px;line-height:1.6">Varsayılan ayarları, 10 Koton ürününü ve hazır görselli 3 kombini veritabanına ekler. Mevcut ürünlere dokunmaz. Koton görselleri yalnızca test içindir.</p>
-   <button class="btn" id="seed">Örnek verileri yükle</button></div>`;
+   <button class="btn" id="seed">Örnek verileri yükle</button></div>
+   <div class="card" style="margin-top:18px"><b>Demo hesaplar</b>
+    <p class="muted" style="margin:8px 0 12px;font-size:13px;line-height:1.7">Sitenin üst menüsündeki <b style="color:var(--paper)">Demo</b> düğmesinden tek tıkla girilen üç hesap kurar:
+     <b style="color:var(--paper)">salt okunur yönetici</b>, örnek kombinleri ve tıklama/satış verisi olan <b style="color:var(--paper)">influencer</b> (mağazası: /deniz-demo, kodu: demo) ve
+     ölçüleri ile adresi dolu <b style="color:var(--paper)">müşteri</b>. Tekrar çalıştırmak güvenlidir, mevcut demo kayıtlarını yeniler.</p>
+    <p class="muted" style="font-size:12.5px;line-height:1.7;margin-bottom:14px">Şifre herkese açıktır (${esc(DEMO_PASSWORD)}). Demo yönetici siparişleri ve müşteri adreslerini görebilir; gerçek müşteriler gelmeden önce menüyü kapat.</p>
+    <p style="font-size:13px;margin-bottom:14px">Durum: ${S.demo?.adminUid ? (S.demo.enabled ? '<span class="badge ok">Kurulu · menü açık</span>' : '<span class="badge">Kurulu · menü kapalı</span>') : '<span class="badge">Kurulmadı</span>'}</p>
+    <div class="row"><button class="btn" id="demoSeed">${S.demo?.adminUid ? 'Demo hesapları yenile' : 'Demo hesapları kur'}</button>
+     ${S.demo?.adminUid ? `<button class="btn ghost" id="demoToggle">${S.demo.enabled ? 'Demo menüsünü kapat' : 'Demo menüsünü aç'}</button>` : ''}</div></div>`;
   $('#seed').onclick = async b => { $('#seed').disabled = true; try { await seed(); await reloadCatalog(); toast('Örnek veriler yüklendi'); go('kombinler'); } catch (e) { toast(e.message, 'bad'); $('#seed').disabled = false; } };
+  $('#demoSeed').onclick = async () => { const b = $('#demoSeed'); b.disabled = true; b.textContent = 'Kuruluyor…';
+    try { await seedDemo(); toast('Demo hesaplar hazır'); go('araclar'); } catch (e) { console.error(e); toast('Demo kurulamadı: ' + e.message, 'bad'); b.disabled = false; b.textContent = 'Tekrar dene'; } };
+  if ($('#demoToggle')) $('#demoToggle').onclick = async () => {
+    await setDoc(doc(db, 'settings', 'main'), { demo: { enabled: !S.demo.enabled } }, { merge: true }); resetSettingsCache(); S = await getSettings(); go('araclar');
+    toast(S.demo.enabled ? 'Demo menüsü açıldı' : 'Demo menüsü kapatıldı; demo yönetici artık hiçbir veri göremez');
+  };
+}
+
+// Demo hesabı ikincil bir Firebase oturumunda açar (adminin kendi oturumu kapanmaz) ve uid'ini döndürür.
+async function demoUser(acc) {
+  const app2 = getApps().find(a => a.name === 'demo-seed') || initializeApp(firebaseConfig, 'demo-seed');
+  const a2 = getAuth(app2);
+  let c;
+  try { c = await createUserWithEmailAndPassword(a2, acc.email, DEMO_PASSWORD); await updateProfile(c.user, { displayName: acc.name }); }
+  catch (e) {
+    if (e.code !== 'auth/email-already-in-use') throw e;
+    c = await signInWithEmailAndPassword(a2, acc.email, DEMO_PASSWORD);
+  }
+  const uid = c.user.uid; await signOut(a2); return uid;
+}
+async function seedDemo() {
+  const A = DEMO_ACCOUNTS, uids = {};
+  for (const r of Object.keys(A)) uids[r] = await demoUser(A[r]);
+  const now = Date.now(), ts = msAgo => Timestamp.fromMillis(now - msAgo), day = 864e5;
+  const inf = A.influencer, slug = 'deniz-demo', code = 'demo';
+  await setDoc(doc(db, 'settings', 'main'), { demo: { enabled: true, adminUid: uids.admin, influencerUid: uids.influencer, musteriUid: uids.musteri } }, { merge: true });
+  resetSettingsCache(); S = await getSettings();
+
+  const b = writeBatch(db);
+  // müşteri: ölçüler, tarz ve adres dolu, alışverişe hazır
+  b.set(doc(db, 'users', uids.musteri), { name: A.musteri.name, email: A.musteri.email, gender: 'kadin', age: '25-34', h: 168, k: 60,
+    styles: ['Günlük', 'Minimal', 'Ofis'], colors: 'Nötr tonlar', budget: '5.000 - 10.000 TL', demo: true,
+    address: { name: A.musteri.name, phone: '0500 000 00 00', city: 'İstanbul', district: 'Kadıköy', line: 'Demo Sokak No: 1 (gerçek adres değildir)' },
+    createdAt: serverTimestamp() }, { merge: true });
+  b.set(doc(db, 'users', uids.influencer), { name: inf.name, email: inf.email, gender: 'kadin', demo: true, createdAt: serverTimestamp() }, { merge: true });
+  // influencer: onaylı, kişisel mağazası açık
+  b.set(doc(db, 'influencers', uids.influencer), { name: inf.name, email: inf.email, role: 'influencer', handles: '@deniz.demo', followers: 48200, taxType: '20b',
+    about: 'Demo hesabı. Gündelik ve ofis kombinleri paylaşıyorum.', status: 'aktif', code, slug, customRates: {}, demo: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  b.set(doc(db, 'refCodes', code), { uid: uids.influencer, customRates: {} });
+  b.set(doc(db, 'stores', slug), { uid: uids.influencer, slug, code, role: 'influencer', active: true, name: inf.name,
+    bio: 'Bu bir demo mağazadır. Sade parçalarla her güne uyan kombinler.', photo: '', socials: { instagram: 'deniz.demo' }, demo: true,
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  // influencerın gardırobu: ana katalogdaki yayında kombinlerden ilk üçü
+  const base = CAT.kombins.filter(k => k.status === 'yayinda' && !k.ownerUid).slice(0, 3);
+  base.forEach((k, i) => b.set(doc(db, 'kombins', 'demo-inf-' + (i + 1)), {
+    name: k.name, desc: k.desc || '', occ: k.occ || '', styles: k.styles || [], gender: k.gender, world: k.world,
+    productIds: k.productIds || [], extraIds: k.extraIds || [], image: k.image || '',
+    ownerUid: uids.influencer, ownerSlug: slug, ownerName: inf.name, status: 'magaza', source: 'studyo', catalog: 'yok', tryon: 'yok', demo: true,
+    createdAt: ts(i * day), updatedAt: serverTimestamp() }));
+  // son 30 güne yayılmış tıklamalar ve üç örnek satış (panel boş görünmesin)
+  for (let i = 0; i < 60; i++) {
+    const k = base[i % Math.max(1, base.length)];
+    b.set(doc(db, 'clicks', 'demo-' + i), { code, infUid: uids.influencer, vid: 'demo' + (i % 37), kombinId: k ? 'demo-inf-' + ((i % base.length) + 1) : null, at: ts(Math.floor((i * 7919) % 30) * day + (i % 9) * 36e5), demo: true });
+  }
+  [['onayli', 21], ['beklemede', 6], ['beklemede', 2]].forEach(([status, ago], i) => {
+    const k = base[i % Math.max(1, base.length)]; if (!k) return;
+    const items = [{ kombinId: 'demo-inf-' + ((i % base.length) + 1), name: k.name, products: (k.productIds || []).map(id => CAT.products[id]).filter(Boolean)
+      .map(p => ({ pid: p.id, name: p.name, category: p.category, price: +p.price || 0 })) }];
+    const lines = commissionLines(items, { kombinId: items[0].kombinId }, S, {});
+    const total = round2(lines.reduce((s, l) => s + l.price, 0));
+    b.set(doc(db, 'refSales', 'demo-' + (i + 1)), { code, infUid: uids.influencer, uid: uids.musteri, orderNo: 'DEMO0' + (i + 1), lines, total,
+      net: round2(lines.reduce((s, l) => s + l.net, 0)), commission: round2(lines.reduce((s, l) => s + l.commission, 0)), status, demo: true,
+      createdAt: ts(ago * day), updatedAt: serverTimestamp() });
+  });
+  await b.commit();
+  await reloadCatalog();
 }
 async function seed() {
   await setDoc(doc(db, 'settings', 'main'), { ...DEFAULT_SETTINGS }, { merge: true });
