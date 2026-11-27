@@ -7,7 +7,7 @@ import {
 } from './app.js';
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import { tryonDecide } from './bodyphoto.js';
+import { tryonDecide, WEAR } from './bodyphoto.js';
 import { suggestKombins, COLORS, usageMap as engineUsage, currentRound } from './engine.js';
 
 const { doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp, writeBatch, Timestamp } = fs;
@@ -56,7 +56,7 @@ async function badges() {
       getDocs(query(collection(db, 'returns'), where('status', '==', 'talep'))),
       getDocs(query(collection(db, 'influencers'), where('status', '==', 'basvuru')))]);
     set('siparisler', o.size); set('iadeler', r.size); set('influencer', i.size);
-    const t = await getDocs(query(collection(db, 'tryons'), where('status', '==', 'hata')));
+    const t = await getDocs(query(collection(db, 'tryons'), where('status', 'in', ['kontrol', 'hata'])));
     set('studyo', t.size + CAT.kombins.filter(k => k.ownerUid && k.catalog === 'bekliyor' && k.status === 'magaza').length);
   } catch (e) { console.warn(e); }
 }
@@ -506,16 +506,20 @@ async function studyo(v) {
   const [ts, ss] = await Promise.all([getDocs(collection(db, 'tryons')), getDocs(collection(db, 'stores'))]);
   const owners = {}; ss.forEach(d => owners[d.data().uid] = d.data());
   const cat = CAT.kombins.filter(k => k.ownerUid && k.catalog === 'bekliyor' && k.status === 'magaza');
-  const tr = ts.docs.map(d => ({ id: d.id, ...d.data() })).filter(t => ['bekliyor', 'uretiliyor', 'onay', 'hata'].includes(t.status))
-    .sort((a, b) => (a.status === 'hata' ? -1 : 0) - (b.status === 'hata' ? -1 : 0) || (toDate(a.createdAt) || 0) - (toDate(b.createdAt) || 0));
+  const all = ts.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (toDate(a.submittedAt || a.createdAt) || 0) - (toDate(b.submittedAt || b.createdAt) || 0));
+  const rev = all.filter(t => t.status === 'kontrol'), run = all.filter(t => ['bekliyor', 'uretiliyor', 'onay', 'hata', 'red'].includes(t.status));
   v.innerHTML = `<div class="lab">Influencer ve stilist kombinleri</div><h2 style="margin:8px 0 18px">Stüdyo talepleri</h2>
-   <div class="card gold"><p class="muted" style="font-size:13px;line-height:1.7">Stüdyoda hazırlanan kombinler sahibinin gardırobunda hemen yayına çıkar. <b style="color:var(--paper)">Ana katalog</b> (ana sayfa gardırobu ve tüm kombinler) için buradan onaylarsın.
-     Giydirme görselleri sunucuda otomatik üretilir (Gemini anahtarı Secret Manager'da); kişi sonucu kendi panelinde görüp yayınlar. Bu listede süren ve hata veren talepler görünür.</p></div>
-   <h3 style="margin:28px 0 14px">Süren giydirmeler <span class="badge">${tr.length}</span></h3><div id="trl" style="display:grid;gap:14px"></div>
+   <div class="card gold"><p class="muted" style="font-size:13px;line-height:1.7">Her stüdyo kombini yayından önce Gemini ile giydirilir (influencer'ın kendi üzerinde ya da seçtiği özelliklerde yeni bir manken üzerinde, anahtar Secret Manager'da).
+     Influencer ürünlerin görselde doğru olduğunu kontrol edip gönderir; <b style="color:var(--paper)">sen onaylayınca</b> kombin onun gardırobunda yayına çıkar. Ürünlerin rengi, kesimi ve detayı ile görselin zarafetini kontrol et.
+     <b style="color:var(--paper)">Ana katalog</b> (ana sayfa ve tüm kombinler) onayı aşağıda ayrıdır.</p></div>
+   <h3 style="margin:28px 0 14px">Onayını bekleyen görseller <span class="badge ${rev.length ? 'warn' : ''}">${rev.length}</span></h3><div id="rvl" style="display:grid;gap:14px"></div>
+   <h3 style="margin:32px 0 14px">Süren giydirmeler <span class="badge">${run.length}</span></h3><div id="trl" style="display:grid;gap:14px"></div>
    <h3 style="margin:32px 0 14px">Katalog onayı bekleyenler <span class="badge">${cat.length}</span></h3><div id="cal" style="display:grid;gap:14px"></div>`;
-  const TL = $('#trl'), CL = $('#cal');
-  if (!tr.length) TL.innerHTML = '<div class="empty">Süren giydirme yok.</div>';
-  for (const t of tr) TL.appendChild(tryonCard(t, owners[t.uid]));
+  const RL = $('#rvl'), TL = $('#trl'), CL = $('#cal');
+  if (!rev.length) RL.innerHTML = '<div class="empty">Onay bekleyen görsel yok.</div>';
+  for (const t of rev) RL.appendChild(tryonCard(t, owners[t.uid]));
+  if (!run.length) TL.innerHTML = '<div class="empty">Süren giydirme yok.</div>';
+  for (const t of run) TL.appendChild(tryonCard(t, owners[t.uid]));
   if (!cat.length) CL.innerHTML = '<div class="empty">Onay bekleyen kombin yok.</div>';
   for (const k of cat) CL.appendChild(ownerKombinCard(k, owners[k.ownerUid]));
 }
@@ -542,25 +546,32 @@ function tryonCard(t, o) {
   const el = document.createElement('div'); el.className = 'card';
   if (!k) { el.innerHTML = `<div class="between"><span class="muted">Kombin silinmiş: ${esc(t.kombinName)}</span><button class="btn sm ghost" data-del>Talebi kaldır</button></div>`;
     el.querySelector('[data-del]').onclick = async () => { await deleteDoc(doc(db, 'tryons', t.id)); go('studyo'); }; return el; }
-  el.innerHTML = `<div class="tryon"><div><div class="lab" style="margin-bottom:8px">Boydan fotoğraf</div><div class="im" data-bp>Yükleniyor…</div></div>
+  const self = t.subject !== 'model', o2 = t.options || {};
+  const who = self ? 'Kendi üzerinde' : 'Manken: ' + ['look', 'age', 'build'].map(x => WEAR[x].opts[o2[x]]).filter(Boolean).join(' · ');
+  const shot = ['pose', 'scene'].map(x => WEAR[x].opts[o2[x]]).filter(Boolean).join(' · ');
+  el.innerHTML = `<div class="tryon ${self ? '' : 'm'}">${self ? `<div><div class="lab" style="margin-bottom:8px">Boydan fotoğraf</div><div class="im" data-bp>Yükleniyor…</div></div>` : ''}
     <div><div class="lab" style="margin-bottom:8px">Sonuç</div><div class="im" data-rs>${t.resultImage ? 'Yükleniyor…' : 'Henüz üretilmedi'}</div></div><div>
-    <div class="row"><span class="badge ${{ onay: 'gold', hata: 'bad' }[t.status] || 'warn'}">${{ bekliyor: 'Sırada', uretiliyor: 'Üretiliyor', onay: 'Sahibinin onayında', hata: 'Hata' }[t.status]}</span>${t.attempts ? `<span class="badge">${t.attempts}. deneme</span>` : ''}<span class="muted" style="font-size:12.5px">${ownerLine(o, k)} · ${fmtDate(t.createdAt, 1)}</span></div>
-    <h3 style="margin-top:10px">${esc(k.name)}</h3>${t.error ? `<p style="color:var(--bad);font-size:13px;margin-top:6px">${esc(t.error)}</p>` : ''}${piecesHtml(k)}
+    <div class="row"><span class="badge ${{ kontrol: 'warn', onay: 'gold', hata: 'bad', red: 'bad' }[t.status] || ''}">${{ bekliyor: 'Sırada', uretiliyor: 'Üretiliyor', onay: 'Influencer kontrolünde', kontrol: 'Onayını bekliyor', hata: 'Hata', red: 'Reddedildi' }[t.status]}</span>${t.attempts ? `<span class="badge">${t.attempts}. üretim</span>` : ''}<span class="muted" style="font-size:12.5px">${ownerLine(o, k)} · ${fmtDate(t.submittedAt || t.createdAt, 1)}</span></div>
+    <h3 style="margin-top:10px">${esc(k.name)}</h3><p class="muted" style="font-size:12.5px;margin-top:4px">${esc(who)}${shot ? ' · ' + esc(shot) : ''}</p>
+    ${t.error ? `<p style="color:var(--bad);font-size:13px;margin-top:6px">${esc(t.error)}</p>` : ''}${t.status === 'red' && t.note ? `<p class="muted" style="font-size:13px;margin-top:6px">Notun: ${esc(t.note)}</p>` : ''}
+    <div class="lab" style="margin-top:12px">Görselde olması gereken ürünler</div>${piecesHtml(k)}
     <div class="row" style="margin-top:16px" data-act></div></div></div>`;
-  let photo = null;
-  getDoc(doc(db, 'bodyPhotos', t.uid)).then(s => { const b = el.querySelector('[data-bp]');
-    if (s.exists()) { photo = s.data().data; b.innerHTML = `<img src="${photo}">`; } else b.textContent = 'Fotoğraf silinmiş'; });
-  if (t.resultImage) getDoc(doc(db, 'kombinImages', t.resultImage)).then(s => { if (s.exists()) el.querySelector('[data-rs]').innerHTML = `<img src="${s.data().data}">`; });
+  if (self) getDoc(doc(db, 'bodyPhotos', t.uid)).then(s => { const b = el.querySelector('[data-bp]');
+    if (s.exists()) b.innerHTML = `<img src="${s.data().data}">`; else b.textContent = 'Fotoğraf silinmiş'; }).catch(() => {});
+  if (t.resultImage) getDoc(doc(db, 'kombinImages', t.resultImage)).then(s => { if (s.exists()) { const r = el.querySelector('[data-rs]');
+    r.innerHTML = `<img src="${s.data().data}" style="cursor:zoom-in" title="Büyüt">`; r.querySelector('img').onclick = e => window.open().document.write(`<body style="margin:0;background:#000"><img src="${e.target.src}" style="max-width:100%;display:block;margin:auto">`); } });
   const act = el.querySelector('[data-act]');
   const btn = (txt, cls, fn) => { const b = document.createElement('button'); b.className = 'btn sm ' + cls; b.textContent = txt; b.onclick = () => fn(b); act.appendChild(b); };
   const call = (action, label, cls, done) => btn(label, cls, async b => {
+    let note;
     if (action === 'cancel' && !confirm('Giydirme talebi iptal edilsin mi? Üretilen görsel silinir.')) return;
+    if (action === 'reject') { note = prompt('Influencer\'a kısa not (ör. "Ceketin rengi farklı çıkmış"):', ''); if (note === null) return; }
     b.disabled = true; b.textContent = '…';
-    try { await tryonDecide(t.id, action); go('studyo'); badges(); toast(done); }
+    try { await tryonDecide(t.id, action, note); go('studyo'); badges(); toast(done); }
     catch (e) { console.error(e); toast(e.message || 'İşlem yapılamadı', 'bad'); b.disabled = false; b.textContent = label; }
   });
-  if (['onay', 'hata'].includes(t.status)) call('retry', 'Yeniden üret', t.status === 'hata' ? '' : 'ghost', 'Yeniden üretiliyor');
-  if (t.status === 'onay') call('publish', 'Sahibi adına yayınla', 'ghost', 'Kombin, kişinin fotoğrafıyla yayında');
+  if (t.status === 'kontrol') { call('approve', 'Onayla ve yayınla', '', 'Kombin gardırobunda yayında'); call('reject', 'Geri çevir', 'ghost', 'Influencer\'a geri gönderildi'); }
+  if (['onay', 'hata', 'red'].includes(t.status)) call('retry', 'Yeniden üret', t.status === 'hata' ? '' : 'ghost', 'Yeniden üretiliyor');
   call('cancel', 'İptal et', 'danger', 'Talep iptal edildi');
   return el;
 }

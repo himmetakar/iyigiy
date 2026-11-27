@@ -4,7 +4,8 @@ import {
   tl, pct, esc, fmtDate, toDate, toast, $, $$, round2, ROLES, compressImage, uid8
 } from './app.js';
 const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp } = fs;
-import { getBodyPhoto, deleteBodyPhoto, requestTryon, photoForm, tryonPanel } from './bodyphoto.js';
+import { getBodyPhoto, deleteBodyPhoto, photoForm, tryonPanel, wearPicker } from './bodyphoto.js';
+import { quotaOf, quotaText } from './partner.js';
 mountNav('');
 const root = $('#root');
 let U, S, INF, RANGE = 30;
@@ -167,47 +168,54 @@ function bindCopy(scope) {
 }
 
 /* ================= kişisel mağaza ================= */
-const KST = { magaza: ['Gardırobunuzda', 'gold'], yayinda: ['Gardırobunuzda ve ana katalogda', 'ok'], arsiv: ['Arşivde', ''] };
+const KST = { taslak: ['Taslak · yayında değil', 'warn'], magaza: ['Gardırobunuzda', 'gold'], yayinda: ['Gardırobunuzda ve ana katalogda', 'ok'], arsiv: ['Arşivde', ''] };
 let TP_OFF = [];
 async function myWardrobe(v, products) {
   TP_OFF.forEach(f => f()); TP_OFF = [];
   v.innerHTML = '<div class="spin"></div>';
   const ks = await getDocs(query(collection(db, 'kombins'), where('ownerUid', '==', U.uid)));
   const list = ks.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-  v.innerHTML = `<div class="between" style="margin-bottom:18px"><p class="muted" style="font-size:13.5px;max-width:620px;line-height:1.7">Stüdyoda hazırladığınız kombinler gardırobunuzda hemen askıya çıkar. Ana katalogda yer alması için ekibimizin onayı gerekir.</p>
-    <a class="btn" href="/studyo">+ Yeni kombin</a></div>
+  const q = quotaOf(INF, list.length), full = q.used >= q.limit;
+  v.innerHTML = `<div class="between" style="margin-bottom:12px"><p class="muted" style="font-size:13.5px;max-width:640px;line-height:1.7">Stüdyoda hazırladığınız her kombin, yayına çıkmadan önce Gemini ile giydirilir: kendi üzerinizde ya da seçtiğiniz özelliklerde bir manken üzerinde. Görseli siz kontrol edip gönderirsiniz, ekibimiz onaylayınca gardırobunuzda askıya çıkar. Ana katalogda yer alması ayrıca onaya bağlıdır.</p>
+    ${full ? '<button class="btn" disabled>Kombin hakkınız doldu</button>' : '<a class="btn" href="/studyo">+ Yeni kombin</a>'}</div>
+    <div class="quota-bar"><div><span style="width:${Math.min(100, q.used / q.limit * 100)}%"></span></div><p>${quotaText(q)}</p></div>
     ${list.length ? '<div class="grid g3" id="wl"></div>' : `<div class="empty">Gardırobunuz boş. <a class="link" href="/studyo">Stüdyoda ilk kombininizi hazırlayın</a>.</div>`}`;
   const L = $('#wl'); if (!L) return;
   for (const k of list) {
     const st = KST[k.status] || ['Taslak', ''];
     const cat = { bekliyor: '<span class="badge warn">Katalog onayı bekliyor</span>', red: '<span class="badge bad">Katalog için uygun bulunmadı</span>' }[k.catalog] || '';
-    const tr = { bekliyor: '<span class="badge warn">Giydirme hazırlanıyor</span>', onay: '<span class="badge gold">Giydirme onayınızda</span>',
-      hata: '<span class="badge bad">Giydirme üretilemedi</span>', hazir: '<span class="badge gold">Sizin fotoğrafınızla</span>' }[k.tryon] || '';
+    const tr = { bekliyor: '<span class="badge warn">Giydiriliyor</span>', onay: '<span class="badge gold">Görsel kontrolünüzde</span>', kontrol: '<span class="badge warn">Ekip kontrolünde</span>',
+      red: '<span class="badge bad">Görsel onaylanmadı</span>', hata: '<span class="badge bad">Görsel üretilemedi</span>', hazir: '<span class="badge gold">Giydirildi</span>' }[k.tryon] || '';
     const el = document.createElement('div'); el.className = 'kcard';
     el.innerHTML = `<div class="ph" data-ph><span class="w">${WORLDS[k.world] || ''}</span></div><div class="meta">
       <div class="row" style="gap:6px">${`<span class="badge ${st[1]}">${st[0]}</span>`}${cat}${tr}</div>
       <b>${esc(k.name)}</b><div class="p">${tl(kombinTotal(k, products))}${(k.extraIds || []).length ? ` <span class="muted" style="font-size:12px">· +${k.extraIds.length} eşlik eden</span>` : ''}</div>
       <div class="row" style="margin-top:12px;gap:8px">
         <a class="btn sm ghost" href="/studyo?id=${k.id}">Düzenle</a>
-        ${k.status !== 'arsiv' && (!k.tryon || ['yok', 'hazir'].includes(k.tryon)) ? `<button class="btn sm ghost" data-a="try">${k.tryon === 'hazir' ? 'Yeniden giydir' : 'Üzerimde gör'}</button>` : ''}
+        ${k.status !== 'arsiv' && (!k.tryon || ['yok', 'hazir'].includes(k.tryon)) ? `<button class="btn sm ${k.tryon === 'hazir' ? 'ghost' : ''}" data-a="try">${k.tryon === 'hazir' ? 'Yeniden giydir' : 'Giydir'}</button>` : ''}
         ${k.status === 'arsiv' ? '<button class="btn sm ghost" data-a="back">Gardıroba as</button>' : '<button class="btn sm ghost" data-a="arc">Arşivle</button>'}
         ${k.status !== 'yayinda' ? '<button class="btn sm danger" data-a="del">Sil</button>' : ''}</div><div data-tp></div></div>`;
     // Giydirme sürüyorsa ya da onay bekliyorsa canlı durum ve "yayınla" burada görünür.
-    if (['bekliyor', 'onay', 'hata'].includes(k.tryon))
-      TP_OFF.push(tryonPanel(el.querySelector('[data-tp]'), k.id, st => { if (st === 'tamam' || st === 'yok') setTimeout(() => myWardrobe(v, products), 600); }));
+    const tp = el.querySelector('[data-tp]');
+    const watch = () => TP_OFF.push(tryonPanel(tp, k.id, st => {
+      if (st === 'yok') wearPicker(tp, U.uid, k, () => {});           // "Seçimi değiştir": seçiciyi yeniden aç
+      else if (st === 'tamam') setTimeout(() => myWardrobe(v, products), 800);
+    }));
+    if (['bekliyor', 'onay', 'hata', 'kontrol', 'red'].includes(k.tryon)) watch();
     loadKombinImage(k).then(s => { if (s) el.querySelector('[data-ph]').style.backgroundImage = `url("${s}")`; });
     el.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
       const a = b.dataset.a; b.disabled = true;
       try {
-        if (a === 'try') {
-          if (!await getBodyPhoto(U.uid)) { toast('Önce boydan fotoğrafınızı yükleyin'); return $('[data-t="foto"]').click(); }
-          await requestTryon(U.uid, k); toast('Görseliniz hazırlanıyor');
+        if (a === 'try') {   // "Kim giysin?" seçicisi kartın altında açılır; talep gidince durum canlı izlenir
+          b.style.display = 'none';
+          return wearPicker(tp, U.uid, k, () => watch());
         }
         if (a === 'arc') {
           if (!confirm('Kombin gardırobunuzdan (ve katalogdan) kaldırılıp arşivlensin mi?')) { b.disabled = false; return; }
           await updateDoc(doc(db, 'kombins', k.id), { status: 'arsiv', catalog: k.catalog === 'onayli' ? 'yok' : (k.catalog || 'yok'), updatedAt: serverTimestamp() });
         }
-        if (a === 'back') await updateDoc(doc(db, 'kombins', k.id), { status: 'magaza', updatedAt: serverTimestamp() });
+        // Giydirilmiş kombin gardıroba geri asılır; giydirilmemişse taslağa döner.
+        if (a === 'back') await updateDoc(doc(db, 'kombins', k.id), { status: k.tryon === 'hazir' ? 'magaza' : 'taslak', updatedAt: serverTimestamp() });
         if (a === 'del') {
           if (!confirm(`"${k.name}" kalıcı olarak silinsin mi?`)) { b.disabled = false; return; }
           await deleteDoc(doc(db, 'kombins', k.id));

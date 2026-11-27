@@ -38,19 +38,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     // Kombinler: herkes yayındakileri ve kişisel mağazalardakileri ('magaza') okur.
-    // Onaylı influencer/stilist kendi kombinini stüdyoda oluşturur; ana kataloğa ('yayinda') yalnızca admin alır.
+    // Onaylı influencer/stilist kendi kombinini stüdyoda 'taslak' olarak oluşturur. Taslak, Gemini ile giydirilip
+    // sahibi yayınlayınca (Cloud Function · tryonDecide) gardırobunda 'magaza' olur: giydirilmeden yayın yok.
+    // Ana kataloğa ('yayinda') yalnızca admin alır. Kombin hakkı sunucuda denetlenir (quotaGuard).
     match /kombins/{id} {
       allow read: if resource.data.status in ['yayinda', 'magaza']
                   || canAudit()
                   || (signedIn() && resource.data.ownerUid == me());
       allow create: if isAdmin()
                     || (activePartner() && request.resource.data.ownerUid == me()
-                        && request.resource.data.status == 'magaza'
+                        && request.resource.data.status == 'taslak'
                         && request.resource.data.catalog in ['yok', 'bekliyor']
-                        && request.resource.data.tryon in ['yok', 'bekliyor']);
+                        && request.resource.data.tryon == 'yok');
       allow update: if isAdmin()
                     || (activePartner() && resource.data.ownerUid == me() && request.resource.data.ownerUid == me()
-                        && (request.resource.data.status in ['magaza', 'arsiv']
+                        && (request.resource.data.status in ['taslak', 'arsiv']
+                            // gardıropta kalmak için giydirilmiş görsel ve aynı ürünler şart
+                            || (request.resource.data.status == 'magaza' && resource.data.tryon == 'hazir' && request.resource.data.tryon == 'hazir'
+                                && request.resource.data.image == resource.data.image
+                                && request.resource.data.productIds == resource.data.productIds)
                             || (resource.data.status == 'yayinda' && request.resource.data.status == 'yayinda'
                                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tryon', 'updatedAt'])))
                         && request.resource.data.catalog in ['yok', 'bekliyor', resource.data.catalog]
@@ -128,7 +134,7 @@ service cloud.firestore {
       allow read: if (signedIn() && me() == uid) || canAudit();
       allow create: if (signedIn() && me() == uid && request.resource.data.status == 'basvuru') || isAdmin();
       allow update: if isAdmin()
-                    || (signedIn() && me() == uid && unchanged(['status', 'code', 'customRates', 'role', 'slug']));
+                    || (signedIn() && me() == uid && unchanged(['status', 'code', 'customRates', 'role', 'slug', 'salesCount', 'kombinLimit']));
       allow delete: if isAdmin();
     }
 

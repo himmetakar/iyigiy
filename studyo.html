@@ -19,6 +19,27 @@ body{overflow-x:hidden}
 .figure{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);aspect-ratio:1100/1971;max-width:100%}
 .figure img.mq{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .6s}
 .figure img.mq.fade{opacity:0}
+/* Mankenin etrafında yaşayan altın ışık: nefes alan hale, salınan ışık huzmesi, gövdeden geçen parıltı, süzülen zerreler */
+.figure .fx{position:absolute;pointer-events:none;mix-blend-mode:screen}
+.figure .halo{left:18%;right:18%;top:20%;height:42%;border-radius:50%;
+  background:radial-gradient(closest-side,transparent 52%,rgba(246,226,170,.20) 74%,rgba(201,164,92,.08) 88%,transparent 100%);filter:blur(8px);animation:breathe 7s ease-in-out infinite}
+.figure .beam{left:28%;right:28%;top:-4%;height:52%;transform-origin:50% 0;
+  background:linear-gradient(180deg,rgba(246,230,180,.22),rgba(232,208,154,.06) 60%,transparent);clip-path:polygon(38% 0,62% 0,100% 100%,0 100%);
+  filter:blur(10px);animation:sway 13s ease-in-out infinite}
+.figure .sheen{left:28%;right:28%;top:24%;height:66%;overflow:hidden;
+  -webkit-mask:radial-gradient(48% 50% at 50% 50%,#000 55%,transparent 100%);mask:radial-gradient(48% 50% at 50% 50%,#000 55%,transparent 100%)}
+.figure .sheen::before{content:"";position:absolute;top:-20%;bottom:-20%;width:38%;left:-60%;
+  background:linear-gradient(100deg,transparent,rgba(255,236,190,.08) 45%,rgba(255,246,220,.16) 50%,rgba(255,236,190,.08) 55%,transparent);animation:sweep 9s ease-in-out infinite 2s}
+.figure .sparks{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;overflow:hidden}
+.figure .sparks i{position:absolute;bottom:12%;left:var(--x);width:var(--s);height:var(--s);border-radius:50%;background:#f6e2aa;
+  box-shadow:0 0 6px 1px rgba(246,226,170,.8);opacity:0;animation:rise var(--d) linear var(--dl) infinite}
+@keyframes breathe{0%,100%{opacity:.55;transform:scale(.96)}50%{opacity:1;transform:scale(1.04)}}
+@keyframes sway{0%,100%{transform:rotate(-2.2deg);opacity:.7}50%{transform:rotate(2.2deg);opacity:1}}
+@keyframes sweep{0%{left:-60%}38%,100%{left:120%}}
+@keyframes rise{0%{transform:translate(0,0);opacity:0}12%{opacity:.9}60%{opacity:.55}100%{transform:translate(var(--dx),-62vh);opacity:0}}
+@media (prefers-reduced-motion:reduce){.figure .halo,.figure .beam,.figure .sheen::before,.figure .sparks i{animation:none}.figure .sparks{display:none}}
+.quota{margin-top:14px;font-size:12.5px;line-height:1.6;color:var(--soft);padding:10px 12px;border:1px solid var(--line2);border-radius:10px;background:var(--bg)}
+.quota b{color:var(--gold2);font-weight:600}
 svg.lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 svg.lines path{fill:none;stroke:var(--gold);stroke-width:1;opacity:.75;stroke-dasharray:400;stroke-dashoffset:400;animation:draw 1.1s var(--ease) forwards}
 svg.lines circle{fill:var(--gold2)}

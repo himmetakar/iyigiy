@@ -5,8 +5,9 @@ import {
   db, fs, onUser, mountNav, OCCASIONS, STYLES, WORLDS, tl, esc, toast, $, $$, uid8
 } from './app.js';
 import { colorScore } from './engine.js';
-import { getBodyPhoto, requestTryon, photoForm, tryonPanel } from './bodyphoto.js';
-const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, serverTimestamp } = fs;
+import { tryonPanel, wearPicker } from './bodyphoto.js';
+import { quotaOf, quotaText } from './partner.js';
+const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp } = fs;
 mountNav('');
 const root = $('#root');
 
@@ -20,9 +21,9 @@ const ZONES = {
   canta: { label: 'Çanta', sub: 'El, omuz, sırt çantası', x: .3, y: .555, side: 'l', extra: true }
 };
 const CORE = ['dis', 'ust', 'elbise', 'alt']; // ayakkabı satılmıyor
-const STEP_TITLES = ['Parçalar', 'Aksesuar', 'Çanta', 'Detaylar', 'Hazır'];
+const STEP_TITLES = ['Parçalar', 'Aksesuar', 'Çanta', 'Detaylar', 'Giydir'];
 
-let U, INF, P = {}, G = 'kadin', pick = {}, step = 0, EDIT = null, SAVED = null, BODY = null;
+let U, INF, P = {}, G = 'kadin', pick = {}, step = 0, EDIT = null, SAVED = null, QUOTA = null, TP_OFF = null;
 
 onUser(async u => {
   U = u;
@@ -34,6 +35,11 @@ onUser(async u => {
   ps.forEach(d => { const p = { id: d.id, ...d.data() }; if (p.active !== false) P[p.id] = p; });
   const id = new URLSearchParams(location.search).get('id');
   if (id) await loadEdit(id);
+  // Kombin hakkı: yeni kombin yalnızca hak varsa (düzenleme her zaman açık)
+  const mine = await getDocs(query(collection(db, 'kombins'), where('ownerUid', '==', u.uid)));
+  QUOTA = quotaOf(INF, mine.size);
+  if (!EDIT && QUOTA.used >= QUOTA.limit) return locked('Kombin hakkınız doldu', quotaText(QUOTA) +
+    '<br><br>Arşivdeki ya da artık kullanmadığınız bir kombini silerek yer açabilir, satış yaptıkça yeni haklar kazanabilirsiniz.', '<a class="btn" href="/influencer#gardirop">Gardırobuma git</a>');
   build();
 });
 function locked(t, m, a) {
@@ -48,10 +54,16 @@ async function loadEdit(id) {
 }
 
 /* ---------------- yerleşim ---------------- */
+// Manken çevresinde yukarı süzülen altın zerreler (konum, boyut, hız rastgele)
+const sparks = (n = 16) => Array.from({ length: n }, () => {
+  const r = (a, b) => (a + Math.random() * (b - a)).toFixed(2);
+  return `<i style="--x:${r(26, 74)}%;--s:${r(1.4, 3.2)}px;--d:${r(9, 17)}s;--dl:-${r(0, 17)}s;--dx:${r(-30, 30)}px"></i>`;
+}).join('');
 function build() {
   root.innerHTML = `<div class="studio">
     <section class="stage hint" id="st"><div class="glow"></div>
-      <div class="figure" id="fig"><img class="mq" id="mq" src="/assets/img/manken-${G}.jpg" alt="Manken"></div>
+      <div class="figure" id="fig"><img class="mq" id="mq" src="/assets/img/manken-${G}.jpg" alt="Manken">
+        <i class="fx halo"></i><i class="fx beam"></i><i class="fx sheen"></i><div class="sparks">${sparks()}</div></div>
       <svg class="lines" id="ln"></svg><div id="hs"></div><div id="co"></div>
       <div class="gtoggle" id="gt"><button data-g="kadin">Kadın</button><button data-g="erkek">Erkek</button></div>
       <div class="stotal"><span class="lab">Kombin fiyatı</span><b id="tot">${tl(0)}</b><span class="muted" style="font-size:11.5px" id="totx"></span></div>
@@ -174,6 +186,7 @@ function panel() {
   if (step === 0) {
     pb.innerHTML = `<div class="lab">${EDIT ? 'Kombini düzenle' : 'Kombin stüdyosu'}</div><h2>Mankeni giydirin</h2>
       <p class="lead">Mankenin üzerindeki <b style="color:var(--gold2)">+</b> işaretlerine dokunun ve her bölge için ürün seçin. Kombin için üst ve alt parça ya da bir elbise yeterli; dış giyimle tamamlayabilirsiniz. Aksesuar ve çantayı mankenin üzerindeki işaretlerden ya da sonraki adımlarda ekleyebilirsiniz.</p>
+      ${QUOTA && !EDIT ? `<p class="quota">${quotaText(QUOTA)}</p>` : ""}
       <div class="plist">${CORE.map(z => pick[z] ? `<div class="pitem"><img src="${esc(pick[z].images?.[0] || '')}" alt=""><div><small>${ZONES[z].label}</small>${esc(pick[z].name)}</div><span class="p">${tl(pick[z].price)}</span></div>`
         : `<div class="pitem open ${(z === 'elbise' && (pick.ust || pick.alt)) || ((z === 'ust' || z === 'alt') && pick.elbise) ? 'dis' : ''}" data-z="${z}"><span class="ph">+</span><div><small>${ZONES[z].label}</small>${ZONES[z].sub}</div></div>`).join('')}</div>
       <div class="sum">Kombin fiyatı <b style="float:right">${tl(coreTotal())}</b></div>`;
@@ -205,18 +218,18 @@ function panel() {
       <div class="sum">Kombin fiyatı <b style="float:right">${tl(coreTotal())}</b><br>
         ${extraTotal() ? `<span class="muted">Eşlik eden (fiyata dahil değil): ${['aksesuar', 'canta'].filter(z => pick[z]).map(z => esc(pick[z].name)).join(', ')} · +${tl(extraTotal())}</span>` : '<span class="muted">Eşlik eden ürün yok</span>'}</div>`;
     $$('#ks .chip').forEach(c => c.onclick = () => c.classList.toggle('on'));
-    foot(`<button class="btn ghost" id="bk" style="flex:0 0 auto">← Geri</button><button class="btn" id="sv">${EDIT ? 'Değişiklikleri kaydet' : 'Kaydet ve gardırobuma as'}</button>`);
+    foot(`<button class="btn ghost" id="bk" style="flex:0 0 auto">← Geri</button><button class="btn" id="sv">${EDIT ? 'Değişiklikleri kaydet' : 'Kaydet ve giydir'}</button>`);
     $('#bk').onclick = () => go(2); $('#sv').onclick = save;
   } else {
-    const url = `${location.origin}/${INF.slug}`;
-    pb.innerHTML = `<div class="done"><div class="seal">✓</div><h2 style="margin-top:18px">Kombininiz gardırobunuzda</h2>
-      <p class="lead">“${esc(SAVED.name)}” kişisel mağazanızda askıda. ${SAVED.catalog === 'bekliyor' ? 'Ana katalog için ekibimizin onayına gönderildi.' : ''}</p>
-      <div class="row" style="justify-content:center;margin-top:18px"><a class="btn sm" href="/${esc(INF.slug)}" target="_blank">Gardırobumu aç ↗</a><button class="btn sm ghost" data-copy="${esc(url)}">Linki kopyala</button></div></div>
-      <div class="sep"></div><div id="tw"></div>`;
-    $('[data-copy]').onclick = async e => { try { await navigator.clipboard.writeText(e.target.dataset.copy); toast('Link kopyalandı'); } catch { prompt('Link:', e.target.dataset.copy); } };
-    tryonAsk();
+    // Giydir: her kombin yayından önce Gemini ile giydirilir (kendi üzerinde ya da seçilen özelliklerde yeni bir manken).
+    const live = SAVED.status !== 'taslak';
+    pb.innerHTML = `<div class="lab">${live ? 'Kaydedildi' : 'Son adım · giydirme'}</div><h2>${live ? 'Kombininiz güncellendi' : 'Kombininizi kim giysin?'}</h2>
+      <p class="lead">${live ? `“${esc(SAVED.name)}” gardırobunuzda yayında.` : `“${esc(SAVED.name)}” taslak olarak kaydedildi. Yayına çıkmadan önce gerçek bir görselle giydirilir; sonucu siz kontrol edersiniz, ardından ekibimiz onaylar.`}</p>
+      <div id="tw" style="margin-top:18px"></div>`;
+    const tw = $('#tw');
+    if (!live) { TP_OFF?.(); TP_OFF = tryonPanel(tw, SAVED.id, st => { if (st === 'yok') wearPicker(tw, U.uid, SAVED, () => {}); }); }
     foot(`<a class="btn ghost" href="/influencer#gardirop" style="flex:0 0 auto">Panele dön</a><button class="btn" id="nw">Yeni kombin hazırla</button>`);
-    $('#nw').onclick = () => { pick = {}; EDIT = null; SAVED = null; history.replaceState(null, '', '/studyo'); go(0); };
+    $('#nw').onclick = () => { if (QUOTA && QUOTA.used >= QUOTA.limit) return toast('Kombin hakkınız doldu', 'bad'); TP_OFF?.(); pick = {}; EDIT = null; SAVED = null; history.replaceState(null, '', '/studyo'); go(0); };
   }
 }
 
@@ -231,6 +244,8 @@ async function save() {
     const world = Object.entries(wc).filter(([w]) => WORLDS[w]).sort((a, b) => b[1] - a[1])[0]?.[0] || 'tanidik';
     const ref = EDIT ? doc(db, 'kombins', EDIT.id) : doc(collection(db, 'kombins'));
     const same = EDIT && JSON.stringify([...EDIT.productIds].sort()) === JSON.stringify(coreIds().sort());
+    // Aynı ürünlerle giydirilmiş kombin yayında kalır; ürün değişirse yeniden giydirilene kadar taslağa döner.
+    const keep = same && EDIT.tryon === 'hazir' && EDIT.status !== 'taslak';
     let image = EDIT?.image || '';
     // Ürünler değiştiyse (ya da yeni kombinse) vitrin görseli parçalardan yeniden hazırlanır.
     if (!same) {
@@ -241,11 +256,13 @@ async function save() {
         image = 'img:' + imgId; }
     }
     const d = { name, desc: $('#kd').value.trim(), occ: $('#ko').value, styles: $$('#ks .chip.on').map(c => c.textContent),
-      gender: G, world, productIds: coreIds(), extraIds: extraIds(), image,
-      ownerUid: U.uid, ownerSlug: INF.slug, ownerName: INF.name, status: 'magaza', source: 'studyo',
+      gender: G, world, productIds: keep ? EDIT.productIds : coreIds(), extraIds: extraIds(), image,
+      ownerUid: U.uid, ownerSlug: INF.slug, ownerName: INF.name, source: 'studyo',
+      status: keep ? (EDIT.status === 'arsiv' ? 'arsiv' : 'magaza') : 'taslak',
       catalog: $('#kc').checked ? 'bekliyor' : 'yok', // düzenlenen kombin ana katalog için yeniden onaya gider
-      tryon: same ? (EDIT?.tryon || 'yok') : 'yok', updatedAt: serverTimestamp() };
+      tryon: keep ? 'hazir' : 'yok', updatedAt: serverTimestamp() };
     if (EDIT) await updateDoc(ref, d); else await setDoc(ref, { ...d, createdAt: serverTimestamp() });
+    if (!EDIT && QUOTA) QUOTA.used++;
     SAVED = { id: ref.id, ...d }; EDIT = null; go(4);
   } catch (e) { console.error(e); toast('Kaydedilemedi: ' + e.message, 'bad'); b.disabled = false; b.textContent = 'Tekrar dene'; }
 }
@@ -269,24 +286,3 @@ async function collage(items) {
   try { return c.toDataURL('image/jpeg', .84); } catch { return ''; }
 }
 
-/* ---------------- giydirme ---------------- */
-async function tryonAsk() {
-  const el = $('#tw'); if (!el) return;
-  el.innerHTML = `<div class="lab">Sanal deneme</div><h3 style="font-family:var(--serif);font-weight:400;font-size:24px;line-height:1.2;margin-top:10px">Bu ürünleri kendi üzerinize giydirip takipçilerinizle paylaşmak ister misiniz?</h3>
-    <p class="lead" style="margin-top:10px">Boydan fotoğrafınızın üzerinde, yüzünüz ve vücut hatlarınız korunarak bu kombin giydirilir. Görsel hazırlanınca gardırobunuzdaki kombin bu görselle yayınlanır.</p>
-    <div class="row" style="margin-top:16px"><button class="btn sm" id="ty">Evet, üzerimde görmek istiyorum</button><button class="btn sm ghost" id="tn">Şimdilik hayır</button></div>`;
-  $('#tn').onclick = () => { el.innerHTML = '<p class="muted" style="font-size:13px">İsterseniz daha sonra panelinizdeki “Gardırobum” sekmesinden giydirme isteyebilirsiniz.</p>'; };
-  $('#ty').onclick = async () => {
-    BODY = BODY || await getBodyPhoto(U.uid);
-    if (BODY) return sendTryon(el);
-    el.innerHTML = `<div class="lab">Boydan fotoğrafınız</div><div id="pfm"></div>`;
-    photoForm($('#pfm'), U.uid, d => { BODY = { data: d }; sendTryon(el); });
-  };
-}
-async function sendTryon(el) {
-  try { await requestTryon(U.uid, SAVED); SAVED.tryon = 'bekliyor';
-    el.innerHTML = `<div class="lab">Sanal deneme · ${esc(SAVED.name)}</div><div id="tpv"></div>`;
-    // Görsel sunucuda üretilir; hazır olunca burada önizleme ve "yayınla" çıkar.
-    tryonPanel($('#tpv'), SAVED.id);
-  } catch (e) { console.error(e); toast('Talep gönderilemedi: ' + e.message, 'bad'); }
-}
